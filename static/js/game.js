@@ -1,8 +1,68 @@
 // 遊戲核心數值與狀態
 const API_BASE = window.API_BASE_URL || "";
 const apiFetch = (path, options) => fetch(`${API_BASE}${path}`, options);
-const ASSET_BASE = window.ASSET_BASE_URL || "";
-const assetPath = (path) => `${ASSET_BASE}${path}`;
+const ASSET_BASE = window.ASSET_BASE_URL || "./";
+const REMOTE_ASSET_BASE = window.REMOTE_ASSET_BASE_URL || API_BASE;
+
+function normalizeBaseUrl(base) {
+    if (!base) return "";
+    return base.endsWith("/") ? base : `${base}/`;
+}
+
+function normalizeImageName(fileName, fallback = "") {
+    const raw = String(fileName || fallback || "").trim();
+    if (!raw) return "";
+    if (/^(?:https?:|data:|blob:)/i.test(raw)) return raw;
+    return raw
+        .replace(/\\/g, "/")
+        .replace(/^\.?\//, "")
+        .replace(/^static\/images\//i, "")
+        .replace(/^images\//i, "");
+}
+
+function imagePath(fileName, fallback = "char_generic.png", base = ASSET_BASE) {
+    const normalized = normalizeImageName(fileName, fallback);
+    if (!normalized) return "";
+    if (/^(?:https?:|data:|blob:)/i.test(normalized)) return normalized;
+    return `${normalizeBaseUrl(base)}static/images/${normalized}`;
+}
+
+const assetPath = (path) => {
+    const normalized = normalizeImageName(path);
+    return normalized ? imagePath(normalized, "") : "";
+};
+
+function remoteImagePath(fileName) {
+    if (!REMOTE_ASSET_BASE || /^(?:https?:|data:|blob:)/i.test(String(fileName || ""))) return "";
+    const normalized = normalizeImageName(fileName);
+    return normalized ? imagePath(normalized, "", REMOTE_ASSET_BASE) : "";
+}
+
+function setImageSource(img, fileName, fallbackFile = "char_generic.png", fallbackDataUri = "") {
+    if (!img) return;
+    const localSrc = imagePath(fileName, fallbackFile);
+    const remoteSrc = remoteImagePath(fileName);
+    const finalFallback = fallbackDataUri || imagePath(fallbackFile, fallbackFile);
+
+    img.onerror = () => {
+        if (remoteSrc && img.src !== remoteSrc) {
+            img.src = remoteSrc;
+            return;
+        }
+        img.onerror = null;
+        if (finalFallback) {
+            img.src = finalFallback;
+        } else {
+            img.style.display = "none";
+        }
+    };
+
+    if (localSrc) {
+        img.src = localSrc;
+    } else if (finalFallback) {
+        img.src = finalFallback;
+    }
+}
 
 const gameState = {
     playerName: '',
@@ -155,7 +215,7 @@ function renderMapPins() {
     // 渲染人物前，先確保不清除掉已經加入的 hotspots
     // 所以改用 createElement 方式加入
     gameState.characters.forEach(c => {
-        let imgSrc = c.image_filename ? assetPath(`static/images/${c.image_filename}`) : assetPath('static/images/char_generic.png');
+        let imgSrc = imagePath(c.image_filename, 'char_generic.png');
         
         const pin = document.createElement('div');
         pin.className = 'map-pin';
@@ -165,22 +225,27 @@ function renderMapPins() {
             <img src="${imgSrc}" alt="${c.name}">
             <div class="pin-label">${c.name}</div>
         `;
+        setImageSource(pin.querySelector('img'), c.image_filename, 'char_generic.png');
         
         pin.addEventListener('click', (e) => {
             e.stopPropagation();
-            showDetailModal(c.name, c.description, imgSrc, c.relationships_text, c.stances_text);
+            showDetailModal(c.name, c.description, imgSrc, c.relationships_text, c.stances_text, c.image_filename);
         });
         
         els.worldMap.appendChild(pin);
     });
 }
 
-function showDetailModal(title, desc, imgSrc, relationships, stances) {
+function showDetailModal(title, desc, imgSrc, relationships, stances, imageFileName = "") {
     els.detailTitle.innerText = title;
     els.detailDesc.innerText = desc;
     
-    if (imgSrc) {
-        els.detailImage.src = imgSrc;
+    if (imgSrc || imageFileName) {
+        if (imageFileName) {
+            setImageSource(els.detailImage, imageFileName, 'char_generic.png');
+        } else {
+            els.detailImage.src = imgSrc;
+        }
         els.detailImage.style.display = 'block';
     } else {
         els.detailImage.style.display = 'none';
@@ -200,8 +265,8 @@ function showDetailModal(title, desc, imgSrc, relationships, stances) {
 function renderNetwork() {
     els.networkGrid.innerHTML = '';
     gameState.characters.forEach(c => {
-        let imgSrc = c.image_filename ? assetPath(`static/images/${c.image_filename}`) : '';
-        let imgHtml = imgSrc ? `<img src="${imgSrc}" alt="${c.name}" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">` : '';
+        let imgSrc = c.image_filename ? imagePath(c.image_filename, '') : '';
+        let imgHtml = imgSrc ? `<img src="${imgSrc}" data-image-file="${c.image_filename}" alt="${c.name}" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">` : '';
         els.networkGrid.innerHTML += `
             <div class="char-card" style="text-align: center;">
                 ${imgHtml}
@@ -210,6 +275,9 @@ function renderNetwork() {
                 <p style="text-align: left;">${c.description}</p>
             </div>
         `;
+    });
+    els.networkGrid.querySelectorAll('img[data-image-file]').forEach((img) => {
+        setImageSource(img, img.dataset.imageFile, 'char_generic.png');
     });
 }
 
@@ -416,39 +484,6 @@ function showIndexExplanation(type) {
 
 // 背景色動態改變已移除，維持穩定色調
 
-function showEvent() {
-    els.triggerEventBtn.classList.add('hidden');
-    if (gameState.currentEventIndex >= gameState.events.length) {
-        return endGame();
-    }
-    
-    const ev = gameState.events[gameState.currentEventIndex];
-    els.eventTitle.innerText = ev.title;
-    if (ev.image_filename) {
-        els.eventImage.src = assetPath(`static/images/${ev.image_filename}`);
-        els.eventImage.style.display = 'block';
-    } else {
-        els.eventImage.style.display = 'none';
-    }
-    els.eventDesc.innerText = ev.description;
-    
-    if (ev.is_news) {
-        // 新聞事件，只有一個按鈕
-        els.btnOptA.innerText = "了解";
-        els.btnOptB.style.display = 'none';
-        els.eventTitle.innerText = "📰 新聞快訊：" + ev.title;
-        els.eventTitle.style.color = "#f44336";
-    } else {
-        els.btnOptA.innerText = ev.options[0].text;
-        els.btnOptB.style.display = 'inline-block';
-        els.btnOptB.innerText = ev.options[1].text;
-        els.eventTitle.style.color = "var(--text-main)";
-    }
-    
-    els.eventModal.classList.remove('hidden');
-    updateProgressBar();
-}
-
 function handleDecision(optIndex) {
     const ev = gameState.events[gameState.currentEventIndex];
     let option = ev.options[0]; // 預設拿第一個
@@ -471,7 +506,7 @@ function showPersuasionModal(config) {
     
     let targetChar = gameState.characters.find(c => c.name === config.target);
     if (targetChar && targetChar.image_filename) {
-        els.persuasionTargetImg.src = assetPath(`static/images/${targetChar.image_filename}`);
+        setImageSource(els.persuasionTargetImg, targetChar.image_filename, 'char_generic.png');
     }
     els.persuasionTargetName.innerText = config.target;
     els.persuasionReason.innerText = config.reason;
@@ -490,87 +525,6 @@ function handlePersuasion(isHigh) {
     const pOption = isHigh ? config.persuasion_high : config.persuasion_low;
     els.persuasionModal.classList.add('hidden');
     applyDecisionAndShowNews(gameState.pendingDecision.option, gameState.pendingDecision.ev, pOption, config.target, isHigh);
-}
-
-function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh = false) {
-    const effects = option.effects || {freedom:0, order:0, progress:0, populism:0};
-    
-    // 合併說服結果的效果
-    if (pOption && pOption.effects) {
-        effects.freedom = (effects.freedom || 0) + (pOption.effects.freedom || 0);
-        effects.order = (effects.order || 0) + (pOption.effects.order || 0);
-        effects.progress = (effects.progress || 0) + (pOption.effects.progress || 0);
-        effects.populism = (effects.populism || 0) + (pOption.effects.populism || 0);
-    }
-    
-    // 應用大環境效果
-    gameState.stats.freedom += effects.freedom;
-    gameState.stats.order += effects.order;
-    gameState.stats.progress += effects.progress;
-    gameState.stats.populism += effects.populism;
-    
-    let statChangesHtml = "";
-    // 處理個人屬性
-    if (option.personal_effects && gameState.character.personal_stats) {
-        if (!ev.target_role || ev.target_role === gameState.character.role || ev.target_role === gameState.character.name) {
-            for (let key in option.personal_effects) {
-                applyPersonalStatChange(key, option.personal_effects[key]);
-            }
-        }
-    }
-    // 處理說服的個人代價
-    if (pOption && pOption.cost && gameState.character.personal_stats) {
-        for (let key in pOption.cost) {
-            applyPersonalStatChange(key, pOption.cost[key]);
-        }
-    }
-
-    function applyPersonalStatChange(key, change) {
-        if (gameState.character.personal_stats[key] !== undefined) {
-            gameState.character.personal_stats[key] += change;
-            let color = change > 0 ? 'green' : 'red';
-            let sign = change > 0 ? '+' : '';
-            statChangesHtml += `<span style="color: ${color}; background: rgba(255,255,255,0.8); padding: 5px 10px; border-radius: 5px;">${key} ${sign}${change}</span>`;
-        }
-    }
-    
-    // 動態更新 NPC 好感度
-    updateNPCApprovalsBasedOnEffects(effects, pTarget, isPHigh);
-    
-    updateStatsUI();
-    renderNPCApprovals();
-    
-    // 隱藏事件，顯示新聞快訊
-    els.eventModal.classList.add('hidden');
-    
-    let newsHTML = "";
-    if (ev.is_news) {
-        newsHTML = `<strong>${ev.title}</strong><br><br>${ev.options[0].result_text}`;
-        if (ev.relationship_effects_text) {
-            newsHTML += `<br><br><em style="color: #555;">影響：${ev.relationship_effects_text}</em>`;
-        }
-    } else {
-        newsHTML = `<strong>${gameState.playerName} 選擇了：${option.text}</strong><br><br>${option.result_text}`;
-        if (pOption) {
-            newsHTML += `<br><br><strong style="color: #f44336;">【說服結果】</strong> ${pOption.result_text}`;
-        }
-        
-        if (option.explanation) {
-            newsHTML += `<hr style="border: 0; border-top: 1px dashed #ccc; margin: 15px 0;">
-            <div style="background: rgba(74, 144, 226, 0.1); padding: 12px; border-radius: 8px; border-left: 4px solid var(--primary); margin-top: 10px;">
-                <h4 style="margin: 0 0 5px 0; color: var(--primary);">🔍 決策解析</h4>
-                <span style="font-size: 0.95rem; color: #333; line-height: 1.5;">${option.explanation}</span>
-            </div>`;
-        }
-    }
-    
-    els.newsText.innerHTML = newsHTML;
-    
-    if (els.newsStatChanges) {
-        els.newsStatChanges.innerHTML = statChangesHtml;
-    }
-    
-    els.newsFlash.classList.remove('hidden');
 }
 
 function updateNPCApprovalsBasedOnEffects(effects, pTarget, isPHigh) {
@@ -727,9 +681,14 @@ function showEvent() {
 
     const ev = gameState.events[gameState.currentEventIndex];
     els.eventTitle.innerText = ev.title;
-    els.eventImage.src = eventIllustrationDataUri(ev.image_filename || ev.title);
+    setImageSource(
+        els.eventImage,
+        ev.image_filename,
+        "",
+        eventIllustrationDataUri(ev.image_filename || ev.title)
+    );
     els.eventImage.style.display = 'block';
-    els.eventImage.alt = `${ev.title} 的一致線稿插圖`;
+    els.eventImage.alt = `${ev.title} 的事件插圖`;
     els.eventDesc.innerText = ev.description;
 
     if (ev.is_news) {
