@@ -1,0 +1,488 @@
+:root {
+    /* 遊戲狀態變數 - 將由 JS 動態修改以改變整體色調 */
+    --world-hue: 50; /* 鵝黃色調 */
+    --world-lightness: 90%; /* 預設明亮 */
+    --world-saturation: 80%;
+    
+    --bg-color: hsl(var(--world-hue), var(--world-saturation), var(--world-lightness));
+    --glass-bg: rgba(255, 255, 255, 0.7);
+    --glass-border: rgba(255, 255, 255, 0.4);
+    --text-main: #2c3e50;
+    --text-light: #546e7a;
+    
+    --primary: #4a90e2;
+    --primary-hover: #357abd;
+}
+
+/* 負面狀態變暗時的深色模式變數預備 */
+body.dark-mode {
+    --glass-bg: rgba(30, 30, 30, 0.7);
+    --glass-border: rgba(100, 100, 100, 0.4);
+    --text-main: #ecf0f1;
+    --text-light: #bdc3c7;
+}
+
+body {
+    margin: 0;
+    padding: 0;
+    font-family: 'Noto Sans TC', sans-serif;
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    transition: background-color 1.5s ease;
+    overflow: hidden; /* 遊戲主畫面不允許捲動 */
+}
+
+/* 玻璃擬物化組件 */
+.glass-panel {
+    background: var(--glass-bg);
+    backdrop-filter: blur(12px);
+    -webkit-backdrop-filter: blur(12px);
+    border: 1px solid var(--glass-border);
+    border-radius: 16px;
+    box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+    padding: 24px;
+    transition: all 0.5s ease;
+}
+
+/* 畫面切換 */
+.screen {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    display: flex;
+    flex-direction: column;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.5s ease;
+    z-index: 1;
+}
+
+.screen.active {
+    opacity: 1;
+    pointer-events: all;
+    z-index: 10;
+}
+
+/* 首頁樣式 */
+#start-screen {
+    justify-content: center;
+    align-items: center;
+    background: radial-gradient(circle at center, transparent, rgba(0,0,0,0.05));
+}
+
+#start-screen .glass-panel {
+    text-align: center;
+    max-width: 400px;
+}
+
+#start-screen h1 {
+    font-size: 2.5rem;
+    margin-bottom: 10px;
+    background: linear-gradient(45deg, #2c3e50, #4a90e2);
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+}
+
+.input-group {
+    display: flex;
+    flex-direction: column;
+    gap: 15px;
+    margin-top: 30px;
+}
+
+input[type="text"] {
+    padding: 12px;
+    border-radius: 8px;
+    border: 1px solid #ccc;
+    font-size: 1rem;
+    outline: none;
+    transition: border-color 0.3s;
+}
+
+input[type="text"]:focus {
+    border-color: var(--primary);
+}
+
+button {
+    padding: 12px 24px;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: bold;
+    cursor: pointer;
+    transition: transform 0.1s, background-color 0.3s;
+}
+
+button:active {
+    transform: scale(0.98);
+}
+
+.primary-btn, #start-btn {
+    background-color: var(--primary);
+    color: white;
+}
+
+.primary-btn:hover, #start-btn:hover {
+    background-color: var(--primary-hover);
+}
+
+.secondary-btn {
+    background-color: transparent;
+    border: 1px solid var(--primary);
+    color: var(--primary);
+}
+
+.secondary-btn:hover {
+    background-color: rgba(74, 144, 226, 0.1);
+}
+
+/* 遊戲主畫面佈局 */
+.stats-bar {
+    display: flex;
+    justify-content: space-around;
+    align-items: center;
+    margin: 20px;
+    padding: 15px 30px;
+    z-index: 20;
+}
+
+.stat {
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    font-weight: bold;
+    flex: 1;
+    max-width: 250px;
+    padding: 5px 10px;
+    cursor: pointer;
+    transition: transform 0.2s, background 0.3s;
+    border-radius: 8px;
+}
+
+.stat:hover {
+    transform: scale(1.05);
+    background: rgba(255,255,255,0.3);
+}
+
+.bar-container {
+    flex-grow: 1;
+    height: 12px;
+    background: rgba(0,0,0,0.1);
+    border-radius: 6px;
+    overflow: hidden;
+}
+
+.bar {
+    height: 100%;
+    transition: width 0.8s cubic-bezier(0.4, 0, 0.2, 1);
+}
+
+.sidebar {
+    position: absolute;
+    left: 20px;
+    top: 100px;
+    width: 250px;
+    z-index: 20;
+}
+
+/* 2.5D 地圖 */
+.map-container {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    width: 90vw;
+    height: auto;
+    max-width: 1200px;
+    max-height: 700px;
+    aspect-ratio: 16 / 9;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 5;
+    transition: filter 1.5s ease;
+}
+
+.isometric-map {
+    position: relative;
+    width: 100%;
+    height: 100%;
+    background-image: url('../images/city_map.png');
+    background-size: 100% 100%;
+    background-position: center;
+    background-repeat: no-repeat;
+    transition: all 1.5s ease;
+}
+
+/* 地圖上的角色圖釘 */
+.map-pin {
+    position: absolute;
+    width: 50px;
+    height: 50px;
+    border-radius: 50%;
+    border: 3px solid white;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.3);
+    transform: translate(-50%, -100%); /* 將定位點放在圖標底部中心 */
+    transition: transform 0.3s cubic-bezier(0.175, 0.885, 0.32, 1.275);
+    cursor: pointer;
+    z-index: 10;
+}
+
+.map-pin:hover {
+    transform: translate(-50%, -100%) scale(1.2);
+    z-index: 100;
+}
+
+.map-pin img {
+    width: 100%;
+    height: 100%;
+    border-radius: 50%;
+    object-fit: cover;
+}
+
+/* 圖釘的名字標籤 */
+.map-pin .pin-label {
+    position: absolute;
+    bottom: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: rgba(0,0,0,0.8);
+    border: 1px solid rgba(255,255,255,0.3);
+    color: white;
+    padding: 3px 8px;
+    border-radius: 10px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    z-index: 101;
+}
+
+.map-pin:hover .pin-label {
+    opacity: 1;
+}
+
+/* 主按鈕 (推進時間) */
+#trigger-event-btn {
+    position: absolute;
+    bottom: 40px;
+    right: 40px;
+    padding: 15px 30px;
+    font-size: 1.2rem;
+    z-index: 20;
+    box-shadow: 0 5px 15px rgba(0,0,0,0.2);
+}
+
+/* 地點熱區 */
+.location-hotspot {
+    position: absolute;
+    width: 80px;
+    height: 80px;
+    background: rgba(255, 255, 255, 0.2);
+    border: 2px dashed rgba(255, 255, 255, 0.5);
+    border-radius: 50%;
+    transform: translate(-50%, -50%);
+    cursor: pointer;
+    z-index: 8;
+    transition: background 0.3s, transform 0.3s;
+}
+
+.location-hotspot:hover {
+    background: rgba(255, 255, 255, 0.5);
+    transform: translate(-50%, -50%) scale(1.1);
+}
+
+.hotspot-label {
+    position: absolute;
+    top: -25px;
+    left: 50%;
+    transform: translateX(-50%);
+    background: var(--primary);
+    border: 1px solid white;
+    color: white;
+    padding: 3px 8px;
+    border-radius: 5px;
+    font-size: 12px;
+    white-space: nowrap;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.3s;
+    z-index: 9;
+}
+
+.location-hotspot:hover .hotspot-label {
+    opacity: 1;
+}
+
+/* 模態視窗 (事件、新聞、結局) */
+.modal {
+    position: absolute;
+    top: 0;
+    left: 0;
+    width: 100vw;
+    height: 100vh;
+    background: rgba(0,0,0,0.4);
+    display: flex;
+    justify-content: center;
+    align-items: center;
+    z-index: 100;
+    opacity: 1;
+    transition: opacity 0.3s;
+}
+
+.modal.hidden {
+    opacity: 0;
+    pointer-events: none;
+}
+
+.modal-content {
+    width: 90%;
+    max-width: 500px;
+    text-align: left;
+}
+
+.options {
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    margin-top: 20px;
+}
+
+.option-btn {
+    background: rgba(255,255,255,0.5);
+    border: 1px solid var(--primary);
+    color: var(--text-main);
+    text-align: left;
+    padding: 15px;
+}
+
+.option-btn:hover {
+    background: var(--primary);
+    color: white;
+}
+
+.news-flash {
+    position: absolute;
+    bottom: 40px;
+    left: 50%;
+    transform: translateX(-50%);
+    width: 80%;
+    max-width: 600px;
+    z-index: 90;
+    border-left: 5px solid var(--primary);
+}
+
+.news-flash.hidden {
+    display: none;
+}
+
+/* 關係網格 */
+.modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 20px;
+}
+.close-btn {
+    background: none;
+    border: none;
+    font-size: 1.5rem;
+    color: var(--text-main);
+}
+.network-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+    gap: 15px;
+    max-height: 60vh;
+    overflow-y: auto;
+}
+.char-card {
+    background: rgba(255,255,255,0.3);
+    padding: 15px;
+    border-radius: 8px;
+    border: 1px solid rgba(0,0,0,0.1);
+}
+.char-card h4 { margin: 0 0 5px 0; color: var(--primary); }
+.char-card .role { font-size: 0.8rem; color: var(--text-light); margin-bottom: 10px; display: block; }
+.char-card p { font-size: 0.9rem; margin: 0; line-height: 1.4; }
+
+/* Stable visual pass: keep saturation and illustration treatment consistent. */
+:root {
+    --world-hue: 46;
+    --world-lightness: 92%;
+    --world-saturation: 34%;
+    --bg-color: #f4efe3;
+    --glass-bg: rgba(255, 255, 255, 0.78);
+    --glass-border: rgba(255, 255, 255, 0.62);
+    --primary: #386f8f;
+    --primary-hover: #2d5b76;
+    --steady: #3f7a5f;
+    --alert: #b77937;
+    --danger: #b75050;
+}
+
+body,
+body.dark-mode {
+    background-color: var(--bg-color);
+    color: var(--text-main);
+    transition: none;
+}
+
+#progress-bar,
+.primary-btn,
+#start-btn,
+.hotspot-label {
+    background: var(--primary) !important;
+}
+
+.stats-bar .stat:nth-child(1) .bar,
+#bar-freedom {
+    background: var(--steady) !important;
+}
+
+.stats-bar .stat:nth-child(2) .bar,
+#bar-order {
+    background: var(--primary) !important;
+}
+
+.stats-bar .stat:nth-child(3) .bar,
+#bar-progress {
+    background: #6f6aa8 !important;
+}
+
+.stats-bar .stat:nth-child(4) .bar,
+#bar-populism {
+    background: var(--danger) !important;
+}
+
+.map-container,
+.isometric-map,
+.glass-panel {
+    transition: opacity 0.35s ease, transform 0.25s ease, box-shadow 0.25s ease;
+}
+
+#event-image {
+    background: #f4f7f7;
+    border: 1px solid rgba(56, 111, 143, 0.24);
+    box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7);
+    object-fit: contain !important;
+    padding: 10px;
+}
+
+.agency-explanation {
+    background: rgba(56, 111, 143, 0.1);
+    border-left: 4px solid var(--primary);
+    border-radius: 8px;
+    color: #283744;
+    line-height: 1.65;
+    margin-top: 12px;
+    padding: 12px;
+}
+
+.agency-explanation h4 {
+    color: var(--primary);
+    margin: 0 0 6px 0;
+}

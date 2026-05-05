@@ -1,0 +1,203 @@
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>萬能的鑰匙</title>
+    <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./static/css/style.css">
+</head>
+<body>
+    <!-- 頂部進度條 -->
+    <div id="progress-container" style="width: 100%; height: 5px; background: #ddd; position: fixed; top: 0; left: 0; z-index: 1000;">
+        <div id="progress-bar" style="width: 0%; height: 100%; background: var(--primary); transition: width 0.5s;"></div>
+    </div>
+
+    <!-- 首頁：角色註冊區 -->
+    <div id="start-screen" class="screen active">
+        <div class="glass-panel" style="max-width: 600px; padding: 40px;">
+            <h1 style="font-size: 3rem; margin-bottom: 20px;">萬能的鑰匙</h1>
+            <p style="text-align: left; line-height: 1.8; margin-bottom: 20px; font-size: 1.1rem;">
+                在民主的社會中，每個人手上都有一把、甚至很多把萬能的鑰匙。<br><br>
+                這可能是你手中的選票、可能是網路上的言論發表、或者是人與人之間的社會互動。我們可以透過手中的鑰匙，開啟新世界的大門。<br><br>
+                但請記住，民主不是一成不變的，它可能會向前邁進，也可能會倒退回黑暗的深淵——這一切，完全取決於我們如何使用手上的鑰匙。
+            </p>
+            <div class="input-group">
+                <input type="text" id="player-name" placeholder="請輸入你的名字..." autocomplete="off">
+                <button id="start-btn">轉動鑰匙，進入世界</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 遊戲主畫面 -->
+    <div id="game-screen" class="screen">
+        <!-- 頂部數值條 -->
+        <header class="stats-bar glass-panel">
+            <div class="stat" onclick="showIndexExplanation('freedom')">
+                <span>自由平權</span>
+                <div class="bar-container"><div class="bar" id="bar-freedom" style="width: 50%; background: #4caf50;"></div></div>
+                <span id="val-freedom">50</span>
+            </div>
+            <div class="stat" onclick="showIndexExplanation('order')">
+                <span>社會秩序</span>
+                <div class="bar-container"><div class="bar" id="bar-order" style="width: 50%; background: #2196f3;"></div></div>
+                <span id="val-order">50</span>
+            </div>
+            <div class="stat" onclick="showIndexExplanation('progress')">
+                <span>進步主義</span>
+                <div class="bar-container"><div class="bar" id="bar-progress" style="width: 50%; background: #9c27b0;"></div></div>
+                <span id="val-progress">50</span>
+            </div>
+            <div class="stat" onclick="showIndexExplanation('populism')">
+                <span>民粹激進</span>
+                <div class="bar-container"><div class="bar" id="bar-populism" style="width: 50%; background: #f44336;"></div></div>
+                <span id="val-populism">50</span>
+            </div>
+        </header>
+
+        <!-- 角色資訊與關係網按鈕 -->
+        <div class="sidebar glass-panel">
+            <h3 id="role-name">角色載入中...</h3>
+            <p id="role-desc">背景載入中...</p>
+            <button id="toggle-network" class="secondary-btn" style="width: 100%; margin-bottom: 15px;">檢視角色關係網</button>
+            
+            <div id="npc-approvals-container">
+                <h4 style="margin: 0 0 10px 0; color: var(--primary); border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 5px;">關鍵人物支持度</h4>
+                <div id="npc-approvals-list" style="display: flex; flex-direction: column; gap: 8px;">
+                    <!-- 動態渲染支持度 -->
+                </div>
+            </div>
+        </div>
+
+        <!-- 個人專屬數值面板 (動態渲染) -->
+        <div class="stats-panel glass-panel" id="personal-stats-panel" style="position: absolute; top: 100px; right: 20px; width: 250px; display: none; z-index: 20;">
+            <h3 style="margin-top: 0; color: var(--primary); font-size: 1.1rem; border-bottom: 1px solid rgba(0,0,0,0.1); padding-bottom: 5px;">角色專屬數據</h3>
+            <div id="personal-stats-container" style="display: flex; flex-direction: column; gap: 10px; margin-top: 10px;">
+                <!-- 動態插入個人數值進度條 -->
+            </div>
+        </div>
+
+        <!-- 2.5D 地圖容器 -->
+        <div class="map-container" id="map-container">
+            <div class="isometric-map" id="world-map">
+                <!-- 角色圖釘將由 JS 動態載入到這裡 -->
+            </div>
+        </div>
+
+        <button id="trigger-event-btn" class="primary-btn hidden">推進時間</button>
+
+        <!-- 遊戲開場介紹序列視窗 -->
+        <div id="intro-modal" class="modal hidden">
+            <div class="modal-content glass-panel">
+                <h2 id="intro-title">世界觀介紹</h2>
+                <p id="intro-desc" style="line-height: 1.6; margin-bottom: 20px;">內容載入中...</p>
+                <div class="options">
+                    <button id="intro-next-btn" class="primary-btn">繼續</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 事件彈出視窗 -->
+        <div id="event-modal" class="modal hidden">
+            <div class="modal-content glass-panel">
+                <div class="modal-header">
+                    <h2 id="event-title">事件標題</h2>
+                    <button id="close-event-modal" class="close-btn">&times;</button>
+                </div>
+                <img id="event-image" src="" alt="事件插圖" style="width: 100%; border-radius: 8px; margin-bottom: 15px; display: none; object-fit: cover; max-height: 200px;">
+                <p id="event-desc">事件描述內容...</p>
+                <div class="options">
+                    <button id="btn-opt-a" class="option-btn">選項 A</button>
+                    <button id="btn-opt-b" class="option-btn">選項 B</button>
+                </div>
+            </div>
+        </div>
+        
+        <!-- 說服檢定彈出視窗 -->
+        <div id="persuasion-modal" class="modal hidden">
+            <div class="modal-content glass-panel" style="border: 2px solid #f44336; box-shadow: 0 0 20px rgba(244, 67, 54, 0.4);">
+                <div class="modal-header">
+                    <h2 style="color: #f44336; margin: 0;">⚠️ 危機：遭遇反彈！</h2>
+                </div>
+                <div style="display: flex; gap: 15px; margin-bottom: 15px; align-items: center; background: rgba(255,255,255,0.5); padding: 10px; border-radius: 8px;">
+                    <img id="persuasion-target-img" src="./static/images/char_generic.png" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover;">
+                    <div>
+                        <h3 id="persuasion-target-name" style="margin: 0 0 5px 0;">NPC 名稱</h3>
+                        <p id="persuasion-reason" style="margin: 0; font-size: 0.95rem; color: #333; font-weight: bold;"></p>
+                    </div>
+                </div>
+                <div class="options">
+                    <button id="btn-persuade-high" class="option-btn" style="border-left: 4px solid #4caf50;">選項 A (高說服)</button>
+                    <button id="btn-persuade-low" class="option-btn" style="border-left: 4px solid #f44336;">選項 B (低說服)</button>
+                </div>
+            </div>
+        </div>
+
+        <!-- 結果與新聞快訊 -->
+        <div id="news-flash" class="modal hidden">
+            <div class="modal-content glass-panel news-style">
+                <div class="modal-header">
+                    <h2 style="color: var(--danger); margin: 0;">📰 新聞快訊</h2>
+                    <button id="close-news-modal" class="close-btn">&times;</button>
+                </div>
+                <p id="news-text" style="font-size: 1.2rem; font-weight: bold; margin: 20px 0;"></p>
+                
+                <div id="news-explanation" style="background: rgba(255,255,255,0.7); padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: left; font-size: 0.95rem; line-height: 1.5; color: #333; display: none;">
+                </div>
+
+                <div id="news-stat-changes" style="display: flex; flex-wrap: wrap; gap: 10px; justify-content: center; margin-bottom: 20px; font-weight: bold;">
+                    <!-- 動態插入數值變化標籤 -->
+                </div>
+                
+                <button id="next-turn-btn" class="primary-btn">確認</button>
+            </div>
+        </div>
+        
+        <!-- 結局畫面 -->
+        <div id="end-screen" class="modal hidden">
+            <div class="modal-content glass-panel">
+                <h2>遊戲結束</h2>
+                <p id="end-text"></p>
+                <button onclick="location.reload()" class="primary-btn">重新遊玩</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- 詳細資訊彈出視窗 (角色或地點) -->
+    <div id="detail-modal" class="modal hidden">
+        <div class="modal-content glass-panel">
+            <div class="modal-header">
+                <h2 id="detail-title">名稱</h2>
+                <button id="close-detail" class="close-btn">&times;</button>
+            </div>
+            <div style="display: flex; gap: 15px; margin-bottom: 15px;">
+                <img id="detail-image" src="" alt="" style="width: 100px; height: 100px; border-radius: 10px; object-fit: cover; display: none;">
+                <p id="detail-desc" style="line-height: 1.5; margin: 0;"></p>
+            </div>
+            <div id="detail-extra" style="background: rgba(255,255,255,0.4); padding: 15px; border-radius: 8px; display: none;">
+                <h4 style="margin-top: 0; color: var(--primary);">私下關係網</h4>
+                <p id="detail-relationships" style="font-size: 0.9rem; line-height: 1.5;"></p>
+                <h4 style="color: var(--primary); margin-top: 15px;">核心立場</h4>
+                <p id="detail-stances" style="font-size: 0.9rem; line-height: 1.5; white-space: pre-wrap;"></p>
+            </div>
+        </div>
+    </div>
+
+    <!-- 關係網彈出視窗 -->
+    <div id="network-modal" class="modal hidden">
+        <div class="modal-content glass-panel" style="max-width: 800px;">
+            <div class="modal-header">
+                <h2>人物關係網</h2>
+                <button id="close-network" class="close-btn">&times;</button>
+            </div>
+            <div class="network-grid" id="network-grid">
+                <!-- 透過 JS 動態載入 -->
+            </div>
+        </div>
+    </div>
+
+    <script>
+        window.API_BASE_URL = "https://political-game-backend.onrender.com";
+        window.ASSET_BASE_URL = window.ASSET_BASE_URL || "./";
+    </script>
+    <script src="./static/js/game.js"></script>
+</body>
+</html>
