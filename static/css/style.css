@@ -369,11 +369,13 @@ button:active {
     overscroll-behavior: contain;
     padding: clamp(16px, 4vh, 36px) 16px;
     transition: opacity 0.3s;
+    visibility: visible;
 }
 
 .modal.hidden {
     opacity: 0;
     pointer-events: none;
+    visibility: hidden;
 }
 
 .modal-content {
@@ -484,7 +486,9 @@ button:active {
     justify-content: center;
     line-height: 1;
     padding: 0;
+    position: relative;
     width: 44px;
+    z-index: 5;
 }
 
 .close-btn:hover {
@@ -1475,6 +1479,67 @@ body.dark-mode {
     gap: 8px;
 }
 
+.society-pulse {
+    background: rgba(255,255,255,0.72);
+    border: 1px solid rgba(56, 111, 143, 0.18);
+    border-left: 4px solid var(--steady);
+    border-radius: 8px;
+    display: grid;
+    gap: 8px;
+    margin: 10px 0;
+    padding: 10px;
+}
+
+.society-pulse > b {
+    color: #2f6d56;
+}
+
+.society-pulse article {
+    align-items: center;
+    animation: speaker-pop 260ms ease both;
+    background: rgba(255,255,255,0.6);
+    border-radius: 8px;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: auto 1fr;
+    padding: 8px;
+}
+
+.society-pulse article:nth-child(3) {
+    animation-delay: 80ms;
+}
+
+.society-pulse article:nth-child(4) {
+    animation-delay: 160ms;
+}
+
+.society-pulse span,
+.society-pulse small {
+    display: block;
+}
+
+.society-pulse span {
+    color: #263746;
+    font-weight: 900;
+}
+
+.society-pulse small {
+    color: #4a5965;
+    font-weight: 700;
+    line-height: 1.4;
+}
+
+.pulse-avatar {
+    animation: avatar-idle 2.5s ease-in-out infinite;
+    background: #eef3f4;
+    border: 2px solid #fff;
+    border-radius: 999px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.12);
+    height: 44px;
+    object-fit: cover;
+    width: 44px;
+}
+
 .option-analysis > b {
     color: var(--primary);
 }
@@ -1763,6 +1828,68 @@ body.dark-mode {
 
 .personality-report p {
     margin: 0;
+}
+
+.ending-report {
+    background: rgba(255,255,255,0.74);
+    border: 1px solid rgba(56, 111, 143, 0.2);
+    border-left: 4px solid var(--primary);
+    border-radius: 10px;
+    display: grid;
+    gap: 10px;
+    margin: 14px 0;
+    padding: 12px;
+}
+
+.ending-report.anarchy,
+.ending-report.populistOrder {
+    border-left-color: var(--danger);
+}
+
+.ending-report.authoritarian {
+    border-left-color: #46505a;
+}
+
+.ending-report.progressive {
+    border-left-color: var(--steady);
+}
+
+.ending-report h3,
+.ending-report p {
+    margin: 0;
+}
+
+.ending-report h3 {
+    color: #263746;
+    font-size: 1.15rem;
+}
+
+.ending-report p {
+    color: #314150;
+    font-weight: 800;
+    line-height: 1.5;
+}
+
+.ending-causes,
+.ending-trail {
+    background: rgba(255,255,255,0.62);
+    border-radius: 8px;
+    display: grid;
+    gap: 6px;
+    padding: 10px;
+}
+
+.ending-causes b,
+.ending-trail b {
+    color: var(--primary);
+}
+
+.ending-causes span,
+.ending-trail small {
+    color: #4a5965;
+    display: block;
+    font-weight: 800;
+    line-height: 1.4;
 }
 
 .relationship-closure {

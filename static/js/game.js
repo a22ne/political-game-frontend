@@ -221,6 +221,9 @@ const gameState = {
     lastArcChanges: [],
     lastOutcome: null,
     nextHook: null,
+    decisionLocked: false,
+    persuasionLocked: false,
+    appliedDecisionKeys: {},
     choiceHistory: [],
     reflectionLog: [],
     behaviorScores: {
@@ -725,6 +728,7 @@ function recordBehaviorChoice(option, ev, effects, pOption, reaction, beat) {
     gameState.choiceHistory.push({
         turn: gameState.currentEventIndex + 1,
         chapter: chapterInfo().label,
+        lens: issueLens(ev).label,
         eventTitle: ev.title,
         choiceText: polishNarrativeText(option.text),
         effect: effectToken(effects),
@@ -980,6 +984,13 @@ function buildSceneDossier(event = {}) {
 
 function stakeholderVoice(name, event = {}) {
     const lens = issueLens(event);
+    const text = eventText(event);
+    const trust = gameState.npcApprovals?.[name] ?? ensureCharacterArc(name)?.trust ?? 50;
+    const mood = trust >= 70
+        ? "他現在比較願意靠近你，"
+        : trust <= 30
+            ? "他已經對你有戒心，"
+            : "";
     const voices = {
         "柯爾市長": "我要知道這會不會讓市府失去控制。",
         "莫長老": "不要把社區變成政治衝突的戰場。",
@@ -991,10 +1002,33 @@ function stakeholderVoice(name, event = {}) {
         "費教授": "先把證據與長期成本講清楚。",
         "蘇網紅": "這件事如果說得夠簡單，就會爆。"
     };
-    if (lens.label === "資訊戰" && name === "雷將軍") return "假消息不是意見，是安全破口。";
-    if (lens.label === "生計壓力" && name === "龐頭目") return "如果大家活不下去，秩序只是好看的字。";
-    if (lens.label === "發展代價" && name === "威廉總裁") return "太快轉彎，工廠、工作與投資都會一起掉下去。";
-    return voices[name] || "我還在看你會把局勢推向哪裡。";
+    let line = voices[name] || "我還在看你會把局勢推向哪裡。";
+
+    if (/車禍|事故|意外|工安|傷亡/.test(text)) {
+        const accidentLines = {
+            "柯爾市長": "第一個問題會是市府有沒有提早知道風險。",
+            "莉亞記者": "我要的是時間線，不是安撫稿。",
+            "雷將軍": "事故會被放大成治理失能，現場秩序要先穩住。",
+            "費教授": "先分清楚責任、制度缺口與情緒歸因。"
+        };
+        line = accidentLines[name] || line;
+    } else if (/醜聞|賄|貪腐|黑箱|弊案/.test(text)) {
+        const scandalLines = {
+            "柯爾市長": "如果這被看成市府包庇，我的執政正當性會直接受傷。",
+            "莉亞記者": "有人想把焦點轉走，代表真正的文件還沒出來。",
+            "費教授": "沒有透明程序，任何承諾都只會變成新的不信任。",
+            "蘇網紅": "黑箱兩個字就夠了，接下來所有人都會站隊。"
+        };
+        line = scandalLines[name] || line;
+    } else if (lens.label === "資訊戰" && name === "雷將軍") {
+        line = "假消息不是意見，是安全破口。";
+    } else if (lens.label === "生計壓力" && name === "龐頭目") {
+        line = "如果大家活不下去，秩序只是好看的字。";
+    } else if (lens.label === "發展代價" && name === "威廉總裁") {
+        line = "太快轉彎，工廠、工作與投資都會一起掉下去。";
+    }
+
+    return `${mood}${line}`;
 }
 
 function renderStakeholderCouncil(event = {}) {
@@ -1350,7 +1384,11 @@ function buildEventBrief(ev) {
     const beat = currentArcBeat();
     const previous = gameState.choiceHistory[gameState.choiceHistory.length - 1];
     const previousLine = previous
-        ? `上一幕你讓「${previous.effect}」成為焦點，現在各方開始把它轉成自己的說法。`
+        ? ev.is_news
+            ? `這是一則插入式新聞：它不是主線跳掉，而是外部事件改變各角色手上的籌碼。`
+            : previous.lens && previous.lens !== lens.label
+                ? `上一幕是「${previous.lens}」，這一幕轉到「${lens.label}」；各方會把前一回合的「${previous.effect}」拿來解讀新事件。`
+                : `上一幕你讓「${previous.effect}」成為焦點，現在各方開始把它轉成自己的說法。`
         : compactText(roleProfile().throughline, 54);
     return `
         <div class="chapter-strip">
@@ -1399,6 +1437,37 @@ function neutralizePersuasionLabel(text = "") {
         .trim();
 }
 
+function npcShiftReactionText(npc, delta, effects = {}) {
+    if (delta < 0) {
+        const lines = {
+            "柯爾市長": "市長幕僚開始擔心這件事會被寫成治理失能，而不是單一意外。",
+            "莫長老": "莫長老把你的路線看成對社區秩序的冒進，開始提醒熟人保持距離。",
+            "艾達議員": "艾達議員覺得你讓議題更難進入正式程序，暫時收回支援。",
+            "威廉總裁": "威廉總裁認為成本被你推到企業身上，開始尋找反制盟友。",
+            "莉亞記者": "莉亞記者覺得你避開了關鍵事實，準備用報導檢視你的說法。",
+            "龐頭目": "龐頭目覺得基層又被要求等待，街頭組織開始不耐。",
+            "雷將軍": "雷將軍認為你低估失控風險，會把安全牌拿得更高。",
+            "費教授": "費教授認為你的說法過度簡化，準備公開拆解。",
+            "蘇網紅": "蘇網紅覺得你給了他反向剪輯的素材。"
+        };
+        return lines[npc] || `${npc}把這次選擇記成你的政治弱點。`;
+    }
+
+    const [key, value] = strongestEffect(effects);
+    const lines = {
+        "柯爾市長": "市府暫時看見可控的收場方式，但仍要求你補上責任歸屬。",
+        "莫長老": "莫長老覺得你至少沒有把社區安全感完全推開。",
+        "艾達議員": "艾達議員看見能把議題送進質詢或法案的入口。",
+        "威廉總裁": "威廉總裁願意談，但會要求你承認改革成本。",
+        "莉亞記者": "莉亞記者拿到可追查的線索，準備延伸報導。",
+        "龐頭目": "龐頭目看見談判籌碼增加，願意先不翻桌。",
+        "雷將軍": "雷將軍認為場面還能被控住，暫時放低警戒。",
+        "費教授": "費教授認為討論還有機會回到證據與制度設計。",
+        "蘇網紅": "蘇網紅抓到能讓更多人理解事件的敘事。"
+    };
+    return lines[npc] || `${npc}看見${effectLabel(key)}${effectDirection(value)}，暫時願意靠近。`;
+}
+
 function buildNpcReaction(beforeApprovals, effects, pTarget, isPHigh) {
     let npc = pTarget || "";
     let text = "";
@@ -1411,26 +1480,37 @@ function buildNpcReaction(beforeApprovals, effects, pTarget, isPHigh) {
         text = isPHigh
             ? `${npc}沒有完全被說服，但願意暫時留在談判桌上。`
             : `${npc}把這次衝突記了下來，之後更可能在關鍵場合阻擋你。`;
-    } else if ((effects.freedom || 0) > 0) {
-        npc = "艾達議員";
-        tone = "support";
-        text = "艾達議員把你的說法轉給幕僚，暗示可以幫忙找正式質詢入口。";
-    } else if ((effects.order || 0) > 0) {
-        npc = "雷將軍";
-        tone = "support";
-        text = "雷將軍稱讚你讓場面降溫，但也提醒你別再把街頭壓力帶進市府。";
-    } else if ((effects.populism || 0) > 0 || (effects.order || 0) < 0) {
-        npc = "莫長老";
-        tone = "oppose";
-        text = "莫長老在社區群組提醒大家保持距離，說這件事已經被年輕人帶偏。";
-    } else if ((effects.progress || 0) > 0) {
-        npc = "莉亞記者";
-        tone = "support";
-        text = "莉亞記者要求你提供更完整的時間線，準備把事件做成追蹤報導。";
     } else {
-        npc = "柯爾市長";
-        tone = "watch";
-        text = "市長辦公室沒有公開回應，但幕僚開始觀察你背後還有多少人。";
+        const shifted = Object.entries(gameState.npcApprovals || {})
+            .map(([name, after]) => [name, after - (beforeApprovals[name] ?? after)])
+            .filter(([name, delta]) => name !== gameState.character?.name && Math.abs(delta) >= 8)
+            .sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0];
+
+        if (shifted) {
+            npc = shifted[0];
+            tone = shifted[1] >= 0 ? "support" : "oppose";
+            text = npcShiftReactionText(npc, shifted[1], effects);
+        } else if ((effects.freedom || 0) > 0) {
+            npc = "艾達議員";
+            tone = "support";
+            text = "艾達議員把你的說法轉給幕僚，暗示可以幫忙找正式質詢入口。";
+        } else if ((effects.order || 0) > 0) {
+            npc = "雷將軍";
+            tone = "support";
+            text = "雷將軍稱讚你讓場面降溫，但也提醒你別再把街頭壓力帶進市府。";
+        } else if ((effects.populism || 0) > 0 || (effects.order || 0) < 0) {
+            npc = "莫長老";
+            tone = "oppose";
+            text = "莫長老在社區群組提醒大家保持距離，說這件事已經被年輕人帶偏。";
+        } else if ((effects.progress || 0) > 0) {
+            npc = "莉亞記者";
+            tone = "support";
+            text = "莉亞記者要求你提供更完整的時間線，準備把事件做成追蹤報導。";
+        } else {
+            npc = "柯爾市長";
+            tone = "watch";
+            text = "市長辦公室沒有公開回應，但幕僚開始觀察你背後還有多少人。";
+        }
     }
 
     const memory = { turn: gameState.currentEventIndex + 1, npc, tone, text };
@@ -1519,6 +1599,54 @@ function renderInteractionDialogue(reaction, effects) {
             </div>
         </div>
     `;
+}
+
+function socialReactionLine(name, event = {}, effects = {}, reaction = {}) {
+    const lens = issueLens(event);
+    const [key, value] = strongestEffect(effects);
+    const trust = gameState.npcApprovals?.[name] ?? 50;
+    const stance = trust >= 70 ? "願意幫你把話傳出去" : trust <= 30 ? "準備把你的漏洞放大" : "還在等你下一步";
+
+    if (name === reaction.npc) {
+        if (reaction.tone === "oppose") return "他把這次選擇記成你的政治弱點。";
+        if (reaction.tone === "support") return "他把這次選擇當成合作入口。";
+        return "他暫時不站隊，但已經開始觀察你的路線是否一致。";
+    }
+
+    const roleLines = {
+        "柯爾市長": value < 0 && key === "order" ? "市府會把焦點放在失控風險。" : "市府先計算這會不會傷到治理正當性。",
+        "莫長老": (effects.populism || 0) > 0 ? "社區群組開始擔心衝突進入日常。" : "他想知道你是不是願意給傳統社群台階。",
+        "艾達議員": (effects.progress || 0) > 0 ? "她看見把議題送進程序的機會。" : "她暫時找不到能進議會的切口。",
+        "威廉總裁": (effects.progress || 0) > 0 ? "他開始盤算改革會改變多少成本。" : "他會用穩定與就業說服觀望者。",
+        "莉亞記者": "她開始補時間線，準備追誰在改寫敘事。",
+        "龐頭目": (effects.order || 0) < 0 ? "他認為街頭籌碼變強了。" : "他擔心基層又被請回去等待。",
+        "雷將軍": lens.label === "安全焦慮" || (effects.order || 0) < 0 ? "他會把事件往安全問題定義。" : "他暫時按兵不動，但要求更清楚的邊界。",
+        "費教授": (effects.populism || 0) > 0 ? "他會公開拆解情緒動員的代價。" : "他要求把討論拉回證據與制度設計。",
+        "蘇網紅": (effects.populism || 0) > 0 ? "他找到可剪輯的衝突點。" : "他覺得這一幕聲量還不夠尖銳。"
+    };
+
+    return `${roleLines[name] || "他重新計算自己在這個議題的位置。"} ${stance}。`;
+}
+
+function renderSocietyPulse(event = {}, effects = {}, reaction = {}) {
+    const names = involvedCharactersForEvent(event, reaction)
+        .filter((name) => name !== gameState.character?.name)
+        .slice(0, 4);
+    if (!names.length) return "";
+
+    return `
+        <div class="society-pulse">
+            <b>小社會正在運作</b>
+            ${names.map((name) => `
+                <article>
+                    ${renderAvatar(name, "pulse-avatar")}
+                    <div>
+                        <span>${escapeHTML(name)}</span>
+                        <small>${escapeHTML(socialReactionLine(name, event, effects, reaction))}</small>
+                    </div>
+                </article>
+            `).join("")}
+        </div>`;
 }
 
 function buildPlainDecisionRead(option, ev, effects, reaction) {
@@ -1693,6 +1821,7 @@ function buildOutcomeReport(option, ev, effects, pOption, reaction, beat) {
         </div>
         ${renderSceneBeat(beat, reaction)}
         ${renderInteractionDialogue(reaction, effects)}
+        ${renderSocietyPulse(ev, effects, reaction)}
         ${buildOptionAnalysis(option, ev, effects, pOption, reaction)}
         ${renderArcChanges()}
         ${renderReflectionPanel(reflection)}
@@ -1795,7 +1924,7 @@ function buildChoiceTimeline() {
     if (!gameState.choiceHistory.length) return "";
     return `
         <div class="choice-timeline">
-            ${gameState.choiceHistory.slice(-3).map((choice) => `
+            ${gameState.choiceHistory.slice(-2).map((choice) => `
                 <article>
                     <span>${escapeHTML(choice.chapter.replace(/：.*/, ""))}</span>
                     <b>${escapeHTML(compactText(choice.choiceText, 24))}</b>
@@ -1895,7 +2024,7 @@ function buildPoliticalReflectionSummary() {
     return `
         <div class="political-reflection-list">
             <b>你的選擇反覆呈現的政治代價</b>
-            ${gameState.reflectionLog.slice(-3).map((item) => `
+            ${gameState.reflectionLog.slice(-2).map((item) => `
                 <article>
                     <span>${escapeHTML(compactText(item.eventTitle, 22))}</span>
                     <small>讓 ${escapeHTML(item.beneficiary)}；也讓 ${escapeHTML(item.payer)}。</small>
@@ -1947,7 +2076,7 @@ function buildRelationshipClosureReport() {
             return { name, arc };
         })
         .sort((a, b) => relationshipPriority(b.arc) - relationshipPriority(a.arc))
-        .slice(0, 5);
+        .slice(0, 3);
 
     if (!entries.length) return "";
 
@@ -2037,12 +2166,22 @@ els.triggerEventBtn.addEventListener('click', showEvent);
 els.btnOptA.addEventListener('click', () => handleDecision(0));
 els.btnOptB.addEventListener('click', () => handleDecision(1));
 els.nextTurnBtn.addEventListener('click', nextTurn);
-els.closeEventModalBtn?.addEventListener('click', () => {
+els.closeEventModalBtn?.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
     els.eventModal.classList.add('hidden');
+    gameState.decisionLocked = false;
+    gameState.persuasionLocked = false;
+    els.btnOptA.disabled = false;
+    els.btnOptB.disabled = false;
     clearMapHighlights();
     els.triggerEventBtn.classList.remove('hidden');
 });
-els.closeNewsModalBtn?.addEventListener('click', nextTurn);
+els.closeNewsModalBtn?.addEventListener('click', (event) => {
+    event.preventDefault();
+    event.stopPropagation();
+    nextTurn();
+});
 els.toggleNetworkBtn.addEventListener('click', () => els.networkModal.classList.remove('hidden'));
 els.closeNetworkBtn.addEventListener('click', () => els.networkModal.classList.add('hidden'));
 els.closeDetailBtn.addEventListener('click', () => els.detailModal.classList.add('hidden'));
@@ -2195,6 +2334,9 @@ async function startGame() {
     gameState.memories = [];
     gameState.lastOutcome = null;
     gameState.nextHook = null;
+    gameState.decisionLocked = false;
+    gameState.persuasionLocked = false;
+    gameState.appliedDecisionKeys = {};
     resetBehaviorTracking();
     
     // 隨機分配可玩角色
@@ -2413,11 +2555,15 @@ function showIndexExplanation(type) {
 // 背景色動態改變已移除，維持穩定色調
 
 function handleDecision(optIndex) {
+    if (gameState.decisionLocked) return;
     const ev = gameState.events[gameState.currentEventIndex];
     let option = ev.options[0]; // 預設拿第一個
     if (!ev.is_news && ev.options[optIndex]) {
         option = ev.options[optIndex];
     }
+    gameState.decisionLocked = true;
+    els.btnOptA.disabled = true;
+    els.btnOptB.disabled = true;
     
     // 檢查是否有說服設定且觸發條件符合
     if (ev.persuasion_config && ev.persuasion_config.if_option === optIndex) {
@@ -2432,6 +2578,9 @@ function handleDecision(optIndex) {
 
 function showPersuasionModal(config) {
     els.eventModal.classList.add('hidden');
+    gameState.persuasionLocked = false;
+    els.btnPersuadeHigh.disabled = false;
+    els.btnPersuadeLow.disabled = false;
     
     let targetChar = gameState.characters.find(c => c.name === config.target);
     setImageSource(
@@ -2452,6 +2601,10 @@ function showPersuasionModal(config) {
 }
 
 function handlePersuasion(isHigh) {
+    if (gameState.persuasionLocked || !gameState.pendingDecision) return;
+    gameState.persuasionLocked = true;
+    els.btnPersuadeHigh.disabled = true;
+    els.btnPersuadeLow.disabled = true;
     const config = gameState.pendingDecision.persuasionConfig || gameState.pendingDecision.ev.persuasion_config;
     const pOption = isHigh ? config.persuasion_high : config.persuasion_low;
     els.persuasionModal.classList.add('hidden');
@@ -2483,6 +2636,118 @@ function updateNPCApprovalsBasedOnEffects(effects, pTarget, isPHigh) {
     }
 }
 
+function eventText(event = {}, option = {}, pOption = null) {
+    return [
+        event.title,
+        event.description,
+        event.image_filename,
+        event.relationship_effects_text,
+        option.text,
+        option.result_text,
+        pOption?.text,
+        pOption?.result_text
+    ].filter(Boolean).join(" ").toLowerCase();
+}
+
+function queueNpcDelta(deltas, name, value) {
+    if (!name || !Object.prototype.hasOwnProperty.call(gameState.npcApprovals, name)) return;
+    deltas[name] = (deltas[name] || 0) + value;
+}
+
+function applyNpcDelta(name, value) {
+    if (!Object.prototype.hasOwnProperty.call(gameState.npcApprovals, name)) return;
+    gameState.npcApprovals[name] = Math.max(0, Math.min(100, gameState.npcApprovals[name] + value));
+}
+
+function clampNpcApprovals() {
+    Object.keys(gameState.npcApprovals || {}).forEach((name) => {
+        gameState.npcApprovals[name] = Math.max(0, Math.min(100, gameState.npcApprovals[name]));
+    });
+}
+
+function syncArcTrustFromApprovals(names = Object.keys(gameState.npcApprovals || {})) {
+    names.forEach((name) => {
+        const arc = ensureCharacterArc(name);
+        if (!arc || gameState.npcApprovals[name] === undefined) return;
+        arc.trust = gameState.npcApprovals[name];
+        arc.relationState = relationshipStateForArc(arc);
+        arc.relationText = relationshipLineForState(arc);
+    });
+}
+
+function contextualNpcDeltas(event = {}, option = {}, effects = {}, pOption = null) {
+    const text = eventText(event, option, pOption);
+    const lens = issueLens(event);
+    const deltas = {};
+
+    if (/車禍|事故|意外|工安|交通|傷亡|災害/.test(text)) {
+        queueNpcDelta(deltas, "柯爾市長", -14);
+        queueNpcDelta(deltas, "莉亞記者", 6);
+        queueNpcDelta(deltas, "費教授", 4);
+        if ((effects.order || 0) > 0) queueNpcDelta(deltas, "雷將軍", 5);
+        if ((effects.progress || 0) > 0) queueNpcDelta(deltas, "艾達議員", 4);
+    }
+
+    if (/信任受挫|信任度受挫|受挫|卸責|究責|市府.*質疑|質疑.*市府|市長.*質疑|質疑.*市長/.test(text)) {
+        queueNpcDelta(deltas, "柯爾市長", -12);
+    }
+
+    if (/醜聞|賄|貪腐|黑箱|弊案|特權|利益輸送/.test(text)) {
+        queueNpcDelta(deltas, "柯爾市長", -12);
+        queueNpcDelta(deltas, "莉亞記者", 8);
+        queueNpcDelta(deltas, "費教授", 4);
+        queueNpcDelta(deltas, "蘇網紅", 4);
+        queueNpcDelta(deltas, "威廉總裁", -3);
+    }
+
+    if (lens.label === "資訊戰" || /假消息|網軍|媒體|言論|造謠|謠言|蘇網紅/.test(text)) {
+        queueNpcDelta(deltas, "莉亞記者", 5);
+        queueNpcDelta(deltas, "費教授", 4);
+        queueNpcDelta(deltas, "蘇網紅", (effects.populism || 0) > 0 ? 8 : -2);
+        if ((effects.order || 0) > 0 || /國安|安全|境外/.test(text)) queueNpcDelta(deltas, "雷將軍", 5);
+    }
+
+    if (lens.label === "生計壓力" || /工資|薪資|罷工|基本收入|勞工|升遷|考績/.test(text)) {
+        queueNpcDelta(deltas, "龐頭目", 8);
+        queueNpcDelta(deltas, "威廉總裁", -5);
+        queueNpcDelta(deltas, "柯爾市長", (effects.progress || 0) > 0 ? -4 : -8);
+        if ((effects.progress || 0) > 0) queueNpcDelta(deltas, "艾達議員", 5);
+    }
+
+    if (lens.label === "發展代價" || /污染|能源|環境|工廠|開發/.test(text)) {
+        queueNpcDelta(deltas, "威廉總裁", -8);
+        queueNpcDelta(deltas, "柯爾市長", -5);
+        queueNpcDelta(deltas, "費教授", 5);
+        queueNpcDelta(deltas, "艾達議員", 4);
+    }
+
+    if (lens.label === "安全焦慮" || /國安|軍事|安全|外部勢力|邊境/.test(text)) {
+        queueNpcDelta(deltas, "雷將軍", 8);
+        if ((effects.freedom || 0) < 0) queueNpcDelta(deltas, "艾達議員", -4);
+        queueNpcDelta(deltas, "費教授", 3);
+    }
+
+    if (lens.label === "世代衝突") {
+        queueNpcDelta(deltas, "莫長老", (effects.populism || 0) > 0 || (effects.order || 0) < 0 ? -7 : 3);
+        queueNpcDelta(deltas, "艾達議員", (effects.progress || 0) > 0 ? 5 : 0);
+        queueNpcDelta(deltas, "莉亞記者", 3);
+    }
+
+    if ((effects.progress || 0) > 0 && /車禍|事故|醜聞|卸責|信任/.test(text)) {
+        queueNpcDelta(deltas, "柯爾市長", -8);
+    }
+
+    return deltas;
+}
+
+function applyContextualNpcDeltas(event = {}, option = {}, effects = {}, pOption = null) {
+    const deltas = contextualNpcDeltas(event, option, effects, pOption);
+    Object.entries(deltas).forEach(([name, value]) => applyNpcDelta(name, value));
+    clampNpcApprovals();
+    syncArcTrustFromApprovals(Object.keys(deltas));
+    return deltas;
+}
+
 function nextTurn() {
     els.newsFlash.classList.add('hidden');
     gameState.currentEventIndex++;
@@ -2497,32 +2762,95 @@ function nextTurn() {
     els.triggerEventBtn.classList.remove('hidden');
 }
 
-async function endGame() {
-    // 判斷結局
-    let ending = "";
+function determineEnding() {
     const { freedom, order, progress, populism } = gameState.stats;
-    
+
     if (populism >= 80 && order <= 30) {
-        ending = "【結局：無政府暴動】極端的民粹摧毀了理智，社會陷入無止盡的街頭暴力與衝突，政府機能徹底癱瘓。";
-    } else if (order >= 80 && freedom <= 30) {
-        ending = "【結局：新威權時代】為了解決動亂，人民讓渡了自由。政府掌握了絕對的控制權，社會穩定但也寂靜無聲。";
-    } else if (freedom >= 70 && progress >= 70 && order >= 50) {
-        ending = "【結局：進步烏托邦】社會達成了難得的平衡，在高度自由與包容中持續發展，成為世界的典範。";
-    } else if (populism >= 70 && order >= 70) {
-        ending = "【結局：極端民粹政權】以多數暴力為名的獨裁。不同的聲音被排擠，社會被單一的狂熱情緒所支配。";
-    } else {
-        ending = "【結局：泥淖中的民主】跌跌撞撞，爭吵不休。社會雖然沒有崩潰，但也在內耗中停滯不前。這就是真實的政治。";
+        return {
+            key: "anarchy",
+            title: "無政府暴動",
+            line: "街頭成為唯一有效的政治語言，制度失去仲裁能力。"
+        };
     }
-    
-    const remembered = gameState.memories.length
-        ? `<div class="memory-panel"><h4>你留下的關係痕跡</h4>${gameState.memories.map((memory) => `
-            <div class="memory-row ${memory.tone}">
-                <span>${escapeHTML(memory.npc)}</span>
-                <small>${escapeHTML(memory.text)}</small>
+    if (order >= 80 && freedom <= 30) {
+        return {
+            key: "authoritarian",
+            title: "新威權時代",
+            line: "社會換到穩定，卻把異議與查證能力一起壓低。"
+        };
+    }
+    if (freedom >= 70 && progress >= 70 && order >= 50) {
+        return {
+            key: "progressive",
+            title: "艱難的改革共識",
+            line: "自由發聲、制度改革與基本秩序勉強接上，改革因此能被延續。"
+        };
+    }
+    if (populism >= 70 && order >= 70) {
+        return {
+            key: "populistOrder",
+            title: "多數意志的高壓秩序",
+            line: "秩序被保住，但它依靠的是群眾情緒與排除不同聲音。"
+        };
+    }
+    return {
+        key: "democraticMud",
+        title: "泥淖中的民主",
+        line: "社會沒有崩潰，但也沒有真正解開彼此的不信任。"
+    };
+}
+
+function endingCauseItems(result) {
+    const { freedom, order, progress, populism } = gameState.stats;
+    const items = [];
+
+    if (populism >= 70) items.push("情緒動員長期偏高，公共討論容易被簡化成站隊。");
+    if (order <= 35) items.push("秩序治理偏低，讓反對者更容易把制度描述成失效。");
+    if (order >= 70) items.push("你多次選擇讓局勢可控，代價是部分訴求被延後處理。");
+    if (freedom <= 35) items.push("公共發聲空間被壓縮，沉默的人不代表真的被說服。");
+    if (freedom >= 65) items.push("你打開更多發聲空間，也讓衝突更難被行政命令快速收束。");
+    if (progress >= 65) items.push("改革被推進，但每一步都要求有人承擔實際成本。");
+    if (progress <= 40) items.push("改革多次退回舊流程，支持者開始懷疑制度能不能回應。");
+
+    if (result.key === "anarchy") {
+        items.unshift("這不是突然變成無政府，而是聲量能推動事件、制度卻無法收束事件的累積結果。");
+    }
+    if (result.key === "authoritarian") {
+        items.unshift("這不是單純變穩定，而是人民在恐懼中接受了更強控制。");
+    }
+    if (result.key === "progressive") {
+        items.unshift("這個結果來自你讓衝突被看見，同時還保留制度處理能力。");
+    }
+
+    return [...new Set(items)].slice(0, 4);
+}
+
+function buildEndingNarrative(result) {
+    const causes = endingCauseItems(result);
+    const lastChoices = gameState.choiceHistory.slice(-2);
+
+    return `
+        <section class="ending-report ${escapeHTML(result.key)}">
+            <h3>結局：${escapeHTML(result.title)}</h3>
+            <p>${escapeHTML(result.line)}</p>
+            <div class="ending-causes">
+                <b>為什麼會走到這裡</b>
+                ${causes.map((cause) => `<span>${escapeHTML(cause)}</span>`).join("")}
             </div>
-        `).join("")}</div>`
-        : "";
-    els.endText.innerHTML = `<p>${escapeHTML(ending)}</p>${buildRelationshipClosureReport()}${buildPersonalityAnalysis()}${remembered}`;
+            ${lastChoices.length ? `
+                <div class="ending-trail">
+                    <b>最後留下的兩個痕跡</b>
+                    ${lastChoices.map((choice) => `
+                        <small>${escapeHTML(compactText(choice.eventTitle, 24))}：${escapeHTML(choice.effect)}</small>
+                    `).join("")}
+                </div>` : ""}
+        </section>`;
+}
+
+async function endGame() {
+    const { freedom, order, progress, populism } = gameState.stats;
+    const endingResult = determineEnding();
+    els.endText.innerHTML = `${buildEndingNarrative(endingResult)}${buildRelationshipClosureReport()}${buildPersonalityAnalysis()}`;
     hydrateDynamicImages(els.endText);
     els.endScreen.classList.remove('hidden');
     
@@ -2681,6 +3009,11 @@ function showEvent() {
         return endGame();
     }
 
+    gameState.decisionLocked = false;
+    gameState.persuasionLocked = false;
+    els.btnOptA.disabled = false;
+    els.btnOptB.disabled = false;
+
     const ev = gameState.events[gameState.currentEventIndex];
     const chapter = chapterInfo();
     const profile = roleProfile();
@@ -2725,6 +3058,13 @@ function showEvent() {
 function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh = false) {
     const effects = { freedom: 0, order: 0, progress: 0, populism: 0, ...(option.effects || {}) };
     const beforeApprovals = { ...gameState.npcApprovals };
+    const decisionKey = [
+        gameState.currentEventIndex,
+        ev.id || ev.title || "event",
+        polishNarrativeText(option.text || ""),
+        pOption ? polishNarrativeText(pOption.text || "") : "direct"
+    ].join("|");
+    const alreadyAppliedPersonalStats = Boolean(gameState.appliedDecisionKeys?.[decisionKey]);
 
     if (pOption && pOption.effects) {
         effects.freedom = (effects.freedom || 0) + (pOption.effects.freedom || 0);
@@ -2739,18 +3079,28 @@ function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh =
     gameState.stats.populism += effects.populism;
 
     let statChangesHtml = "";
-    if (option.personal_effects && gameState.character.personal_stats) {
+    const personalChanges = {};
+    function queuePersonalStatChange(key, change) {
+        personalChanges[key] = (personalChanges[key] || 0) + change;
+    }
+
+    if (!alreadyAppliedPersonalStats && option.personal_effects && gameState.character.personal_stats) {
         if (!ev.target_role || ev.target_role === gameState.character.role || ev.target_role === gameState.character.name) {
             for (let key in option.personal_effects) {
-                applyPersonalStatChange(key, option.personal_effects[key]);
+                queuePersonalStatChange(key, option.personal_effects[key]);
             }
         }
     }
 
-    if (pOption && pOption.cost && gameState.character.personal_stats) {
+    if (!alreadyAppliedPersonalStats && pOption && pOption.cost && gameState.character.personal_stats) {
         for (let key in pOption.cost) {
-            applyPersonalStatChange(key, pOption.cost[key]);
+            queuePersonalStatChange(key, pOption.cost[key]);
         }
+    }
+
+    if (!alreadyAppliedPersonalStats) {
+        Object.entries(personalChanges).forEach(([key, change]) => applyPersonalStatChange(key, change));
+        gameState.appliedDecisionKeys[decisionKey] = true;
     }
 
     function applyPersonalStatChange(key, change) {
@@ -2763,6 +3113,7 @@ function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh =
     }
 
     updateNPCApprovalsBasedOnEffects(effects, pTarget, isPHigh);
+    applyContextualNpcDeltas(ev, option, effects, pOption);
     const reaction = buildNpcReaction(beforeApprovals, effects, pTarget, isPHigh);
     const beat = sceneBeat(effects, reaction);
     gameState.lastOutcome = reaction;
