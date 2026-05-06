@@ -128,7 +128,20 @@ const gameState = {
     },
     pendingDecision: null,
     memories: [],
-    lastOutcome: null
+    characterArcs: {},
+    lastArcChanges: [],
+    lastOutcome: null,
+    nextHook: null,
+    choiceHistory: [],
+    behaviorScores: {
+        assertiveness: 0,
+        cooperation: 0,
+        riskTolerance: 0,
+        institutionTrust: 0,
+        empathy: 0,
+        pragmatism: 0,
+        conflictAvoidance: 0
+    }
 };
 
 function escapeHTML(value = "") {
@@ -304,6 +317,453 @@ function effectDirection(value) {
     return "沒有明顯變化";
 }
 
+function behaviorScoreTemplate() {
+    return {
+        assertiveness: 0,
+        cooperation: 0,
+        riskTolerance: 0,
+        institutionTrust: 0,
+        empathy: 0,
+        pragmatism: 0,
+        conflictAvoidance: 0
+    };
+}
+
+function resetBehaviorTracking() {
+    gameState.choiceHistory = [];
+    gameState.behaviorScores = behaviorScoreTemplate();
+}
+
+function eventArcWeight(event = {}, index = 0) {
+    const text = `${event.title || ""} ${event.description || ""} ${event.image_filename || ""}`.toLowerCase();
+    let weight = 40;
+
+    if (/wage|education|marriage|ubi|工資|學生|教育|婚姻|基本收入|社會福利/.test(text)) {
+        weight = 10;
+    } else if (/fakenews|media|scandal|bribe|假新聞|媒體|醜聞|賄賂|黑箱/.test(text)) {
+        weight = 35;
+    } else if (/pollution|energy|military|污染|能源|軍事|國防|安全/.test(text)) {
+        weight = 65;
+    }
+
+    if (event.target_role) weight -= 4;
+    return weight + index / 100;
+}
+
+function smoothStoryEvents(events = []) {
+    return events
+        .map((event, index) => ({ event, index, weight: eventArcWeight(event, index) }))
+        .sort((a, b) => a.weight - b.weight)
+        .map(({ event }) => event);
+}
+
+function currentArcBeat() {
+    const total = Math.max(gameState.events.length, 1);
+    const turn = gameState.currentEventIndex + 1;
+    const ratio = turn / total;
+
+    if (ratio <= 0.25) {
+        return {
+            label: "起點",
+            line: "先建立可信度，讓各方知道你用什麼方式處理衝突。"
+        };
+    }
+    if (ratio <= 0.55) {
+        return {
+            label: "轉折",
+            line: "前面的表態開始變成代價，支持者與反對者都會拿它來要求你。"
+        };
+    }
+    if (ratio <= 0.8) {
+        return {
+            label: "壓力",
+            line: "反對者開始串聯，盟友也會要求你把承諾落到具體流程。"
+        };
+    }
+    return {
+        label: "收束",
+        line: "最後不是單次勝負，而是檢驗你前面留下的關係與承諾。"
+    };
+}
+
+function buildArcThread(ev) {
+    const beat = currentArcBeat();
+    const previous = gameState.choiceHistory[gameState.choiceHistory.length - 1];
+    const previousLine = previous
+        ? `前情：你上回合選擇「${compactText(previous.choiceText, 18)}」；${previous.threadLine}`
+        : `主線：${compactText(roleProfile().throughline, 42)}`;
+
+    return `
+        <div class="arc-thread">
+            <span>${escapeHTML(beat.label)}</span>
+            <strong>${escapeHTML(beat.line)}</strong>
+            <small>${escapeHTML(previousLine)}</small>
+        </div>`;
+}
+
+function storyThreadLine(effects = {}, reaction = {}) {
+    const [key, value] = strongestEffect(effects);
+    if (value === 0) return "各方還在觀望，下一步會決定誰願意靠近。";
+
+    const consequence = {
+        freedom: value > 0 ? "公共發聲被打開，反對者會要求你證明不是只會喊口號。" : "場面安靜下來，但支持者會追問你是不是退讓。",
+        order: value > 0 ? "秩序暫時穩住，接下來要把降溫換成具體承諾。" : "街頭壓力升高，接下來必須處理失控風險。",
+        progress: value > 0 ? "議題進入流程，下一步要找到願意承擔的人。" : "改革退回舊路徑，下一步要重新打開政策窗口。",
+        populism: value > 0 ? "聲量快速擴散，下一步要面對反彈與誤讀。" : "情緒被降溫，下一步要避免議題跟著消失。"
+    }[key];
+
+    if (reaction.tone === "oppose") return `${consequence} ${reaction.npc}會成為新的阻力。`;
+    if (reaction.tone === "support") return `${consequence} ${reaction.npc}願意暫時靠近。`;
+    return `${consequence} ${reaction.npc}還在等待你下一步。`;
+}
+
+function scoreBehaviorChoice(effects = {}, pOption = null, reaction = {}) {
+    const scores = gameState.behaviorScores;
+
+    if ((effects.freedom || 0) > 0) {
+        scores.assertiveness += 2;
+        scores.empathy += 1;
+    }
+    if ((effects.freedom || 0) < 0) {
+        scores.conflictAvoidance += 1;
+    }
+    if ((effects.order || 0) > 0) {
+        scores.cooperation += 1;
+        scores.pragmatism += 1;
+        scores.conflictAvoidance += 1;
+    }
+    if ((effects.order || 0) < 0) {
+        scores.riskTolerance += 2;
+        scores.assertiveness += 1;
+    }
+    if ((effects.progress || 0) > 0) {
+        scores.institutionTrust += 2;
+        scores.pragmatism += 1;
+    }
+    if ((effects.progress || 0) < 0) {
+        scores.conflictAvoidance += 1;
+    }
+    if ((effects.populism || 0) > 0) {
+        scores.riskTolerance += 2;
+        scores.assertiveness += 1;
+    }
+    if ((effects.populism || 0) < 0) {
+        scores.cooperation += 1;
+        scores.empathy += 1;
+    }
+    if (pOption) {
+        scores.cooperation += 1;
+        scores.pragmatism += 1;
+    }
+    if (reaction.tone === "oppose") {
+        scores.riskTolerance += 1;
+    }
+    if (reaction.tone === "support") {
+        scores.cooperation += 1;
+    }
+}
+
+function recordBehaviorChoice(option, ev, effects, pOption, reaction, beat) {
+    if (ev.is_news) return;
+    scoreBehaviorChoice(effects, pOption, reaction);
+    gameState.choiceHistory.push({
+        turn: gameState.currentEventIndex + 1,
+        chapter: chapterInfo().label,
+        eventTitle: ev.title,
+        choiceText: polishNarrativeText(option.text),
+        effect: effectToken(effects),
+        beat: beat.label,
+        npc: reaction.npc,
+        tone: reaction.tone,
+        threadLine: storyThreadLine(effects, reaction)
+    });
+    gameState.choiceHistory = gameState.choiceHistory.slice(-10);
+}
+
+function characterArcDefaults(name = "") {
+    const arcs = {
+        "柯爾市長": {
+            goal: "守住執政合法性，同時避免任何單一陣營綁架市府。",
+            fear: "局勢失控後，他只能用行政命令收場。",
+            plan: "先拖進協調會，再看誰有足夠籌碼。"
+        },
+        "莫長老": {
+            goal: "保護社區秩序與長輩網絡，不讓街頭衝突進入日常生活。",
+            fear: "社區被貼上守舊或失控的標籤。",
+            plan: "用場地、人脈與輿論壓力要求運動降溫。"
+        },
+        "艾達議員": {
+            goal: "把民間怒氣轉成可審議的法案與質詢。",
+            fear: "議題只剩口號，無法進入制度。",
+            plan: "尋找能公開承擔風險的倡議者。"
+        },
+        "威廉總裁": {
+            goal: "維持投資穩定與企業談判空間。",
+            fear: "政策被情緒推著走，成本無法預測。",
+            plan: "靠資源與專家話語把改革速度壓慢。"
+        },
+        "莉亞記者": {
+            goal: "把傳聞整理成可查證的公共事件。",
+            fear: "自己變成某一方的宣傳工具。",
+            plan: "追時間線、找證據、逼各方說清楚。"
+        },
+        "龐頭目": {
+            goal: "證明街頭組織仍然能影響政策。",
+            fear: "群眾被安撫後，基層又被排除在談判外。",
+            plan: "用動員能力換取議程上的席位。"
+        },
+        "雷將軍": {
+            goal: "守住國安與秩序邊界。",
+            fear: "外部勢力與內部混亂互相放大。",
+            plan: "在安全名義下要求更強控制。"
+        },
+        "費教授": {
+            goal: "讓公共討論回到證據與制度設計。",
+            fear: "民粹語言取代事實，讓政策無法被檢驗。",
+            plan: "拆解論點，提醒大家看長期成本。"
+        },
+        "蘇網紅": {
+            goal: "抓住能引爆注意力的矛盾。",
+            fear: "事件太複雜，觀眾失去興趣。",
+            plan: "把衝突剪成容易傳播的敘事。"
+        }
+    };
+
+    return arcs[name] || {
+        goal: "在混亂中保住自己的位置。",
+        fear: "局勢變化太快，原本的籌碼失效。",
+        plan: "先觀望，再向有優勢的一方靠近。"
+    };
+}
+
+function initializeCharacterArcs() {
+    const names = new Set([
+        ...Object.keys(gameState.npcApprovals || {}),
+        ...gameState.characters.map((character) => character.name).filter(Boolean)
+    ]);
+    gameState.characterArcs = {};
+    names.forEach((name) => {
+        gameState.characterArcs[name] = {
+            ...characterArcDefaults(name),
+            trust: gameState.npcApprovals[name] ?? 50,
+            momentum: 0,
+            tension: 0,
+            lastChange: "還在觀望你的第一步。"
+        };
+    });
+    gameState.lastArcChanges = [];
+}
+
+function ensureCharacterArc(name = "") {
+    if (!name) return null;
+    if (!gameState.characterArcs[name]) {
+        gameState.characterArcs[name] = {
+            ...characterArcDefaults(name),
+            trust: gameState.npcApprovals[name] ?? 50,
+            momentum: 0,
+            tension: 0,
+            lastChange: "剛被捲入局勢。"
+        };
+    }
+    return gameState.characterArcs[name];
+}
+
+function issueLens(event = {}) {
+    const text = `${event.title || ""} ${event.description || ""} ${event.image_filename || ""}`.toLowerCase();
+    if (/wage|ubi|工資|基本收入|社會福利/.test(text)) {
+        return {
+            label: "生計壓力",
+            cause: "物價與薪資落差累積太久，基層開始要求把補償寫進制度。",
+            stakes: "企業成本、政府財政與街頭支持會同時被拉扯。",
+            actors: ["龐頭目", "艾達議員", "威廉總裁", "柯爾市長"]
+        };
+    }
+    if (/education|學生|教育|校園/.test(text)) {
+        return {
+            label: "世代衝突",
+            cause: "年輕人的訴求碰到社區與學校的舊規則，雙方都怕自己被忽視。",
+            stakes: "訴求能不能從街頭進入正式程序，會決定後面誰願意支援。",
+            actors: ["艾達議員", "莫長老", "莉亞記者", "費教授"]
+        };
+    }
+    if (/fakenews|media|scandal|bribe|網路|言論|假消息|媒體|醜聞|賄賂/.test(text)) {
+        return {
+            label: "資訊戰",
+            cause: "選舉接近，各方都想先定義真相；假消息與言論管制因此被綁在一起。",
+            stakes: "查證、自由與安全會互相衝突，任何表態都可能被剪成另一種敘事。",
+            actors: ["莉亞記者", "蘇網紅", "雷將軍", "費教授"]
+        };
+    }
+    if (/pollution|energy|污染|能源|環境/.test(text)) {
+        return {
+            label: "發展代價",
+            cause: "經濟成長留下污染與能源壓力，居民不再相信企業與政府會自己處理。",
+            stakes: "改革速度越快，投資與就業的反彈也越明顯。",
+            actors: ["威廉總裁", "艾達議員", "柯爾市長", "費教授"]
+        };
+    }
+    if (/military|國安|軍事|安全|外部勢力/.test(text)) {
+        return {
+            label: "安全焦慮",
+            cause: "外部威脅被放大後，秩序派開始要求更強控制，改革派則擔心自由被交換掉。",
+            stakes: "你要判斷安全需求是真問題，還是被拿來壓縮公共討論。",
+            actors: ["雷將軍", "柯爾市長", "艾達議員", "蘇網紅"]
+        };
+    }
+    if (/marriage|婚姻|平權|家庭/.test(text)) {
+        return {
+            label: "價值衝突",
+            cause: "新的權利訴求碰到傳統家庭想像，雙方都覺得自己的生活方式被威脅。",
+            stakes: "同理與制度設計如果斷開，議題會滑向身份對立。",
+            actors: ["艾達議員", "莫長老", "費教授", "莉亞記者"]
+        };
+    }
+    return {
+        label: "信任危機",
+        cause: "制度信任太薄，一個事件就能讓舊矛盾重新浮上來。",
+        stakes: "誰先說服旁觀者，誰就能決定這件事被看成改革、失序或交換。",
+        actors: [roleProfile().ally, roleProfile().skeptic, "柯爾市長", "莉亞記者"]
+    };
+}
+
+function involvedCharactersForEvent(event = {}, reaction = null, pTarget = null) {
+    const names = [
+        pTarget,
+        reaction?.npc,
+        ...issueLens(event).actors,
+        roleProfile().ally,
+        roleProfile().skeptic
+    ].filter(Boolean);
+    return [...new Set(names)].filter((name) => name !== gameState.character?.name).slice(0, 4);
+}
+
+function buildWhyPanel(event = {}) {
+    const lens = issueLens(event);
+    const previous = gameState.choiceHistory[gameState.choiceHistory.length - 1];
+    const why = previous
+        ? `因為你上回合讓「${previous.effect}」成為焦點，${lens.cause}`
+        : lens.cause;
+
+    return `
+        <div class="why-panel">
+            <span>${escapeHTML(lens.label)}</span>
+            <b>為什麼現在發生</b>
+            <p>${escapeHTML(why)}</p>
+            <small>${escapeHTML(lens.stakes)}</small>
+        </div>`;
+}
+
+function arcStatusText(arc) {
+    if (!arc) return "觀望中";
+    if (arc.tension >= 4) return "準備反制";
+    if (arc.momentum >= 4) return "主線推進";
+    if (arc.trust >= 70) return "願意靠近";
+    if (arc.trust <= 30) return "保持距離";
+    return "觀望拉扯";
+}
+
+function renderCharacterArcCard(name, event = null) {
+    const arc = ensureCharacterArc(name);
+    const focus = event ? issueLens(event).label : "主線";
+    return `
+        <article class="arc-card ${arc.tension >= 4 ? "tense" : arc.momentum >= 4 ? "moving" : ""}">
+            ${renderAvatar(name, "arc-avatar")}
+            <div>
+                <span>${escapeHTML(arcStatusText(arc))}</span>
+                <b>${escapeHTML(name)}</b>
+                <small>${escapeHTML(focus)}：${escapeHTML(compactText(arc.goal, 34))}</small>
+            </div>
+        </article>`;
+}
+
+function renderCharacterArcBoard(event = {}) {
+    const names = involvedCharactersForEvent(event);
+    return `
+        <div class="character-arc-board">
+            <div class="arc-board-title">牽動角色主線</div>
+            ${names.slice(0, 3).map((name) => renderCharacterArcCard(name, event)).join("")}
+        </div>`;
+}
+
+function arcChangeLine(name, effects = {}, reaction = {}) {
+    const [key, value] = strongestEffect(effects);
+    if (reaction.npc === name && reaction.tone === "oppose") {
+        return "你的選擇碰到他的底線，他會把自己的主線推向反制。";
+    }
+    if (reaction.npc === name && reaction.tone === "support") {
+        return "你給了他可利用的入口，他的主線暫時和你靠近。";
+    }
+
+    if (name === "艾達議員" && (effects.progress > 0 || effects.freedom > 0)) return "她更有理由把民間壓力送進正式議程。";
+    if (name === "莫長老" && (effects.populism > 0 || effects.order < 0)) return "他會把事件說成社區秩序被威脅。";
+    if (name === "莉亞記者" && (effects.progress > 0 || effects.freedom > 0)) return "她拿到追查線索，準備把事件做成連續報導。";
+    if (name === "雷將軍" && (effects.order < 0 || effects.populism > 0)) return "他得到更多理由主張安全控管。";
+    if (name === "費教授" && (effects.populism > 0)) return "他會公開提醒大家不要被情緒牽著走。";
+    if (name === "蘇網紅" && (effects.populism > 0)) return "他抓到可傳播的衝突，會把事件剪成更尖銳的版本。";
+    if (name === "威廉總裁" && (effects.progress > 0)) return "他開始評估改革會不會改變成本結構。";
+    if (name === "龐頭目" && (effects.order < 0 || effects.freedom > 0)) return "他看到街頭籌碼增加，會要求更多談判位置。";
+
+    return `${effectLabel(key)}${effectDirection(value)}，讓他重新計算自己的站位。`;
+}
+
+function updateCharacterArcs(event = {}, effects = {}, reaction = {}, pTarget = null, isPHigh = false) {
+    const names = involvedCharactersForEvent(event, reaction, pTarget);
+    const changes = [];
+    names.forEach((name) => {
+        const arc = ensureCharacterArc(name);
+        if (!arc) return;
+
+        if (reaction.npc === name) {
+            if (reaction.tone === "support") {
+                arc.trust += 8;
+                arc.momentum += 2;
+            } else if (reaction.tone === "oppose") {
+                arc.trust -= 8;
+                arc.tension += 2;
+            } else {
+                arc.tension += 1;
+            }
+        }
+
+        if (pTarget === name) {
+            arc.trust += isPHigh ? 6 : -10;
+            arc.tension += isPHigh ? 0 : 2;
+        }
+
+        if (name === "艾達議員" && ((effects.progress || 0) > 0 || (effects.freedom || 0) > 0)) arc.momentum += 1;
+        if (name === "莫長老" && ((effects.populism || 0) > 0 || (effects.order || 0) < 0)) arc.tension += 1;
+        if (name === "莉亞記者" && ((effects.progress || 0) > 0 || (effects.freedom || 0) > 0)) arc.momentum += 1;
+        if (name === "雷將軍" && ((effects.order || 0) < 0 || (effects.populism || 0) > 0)) arc.tension += 1;
+        if (name === "費教授" && ((effects.populism || 0) > 0)) arc.tension += 1;
+        if (name === "蘇網紅" && ((effects.populism || 0) > 0)) arc.momentum += 2;
+        if (name === "威廉總裁" && ((effects.progress || 0) > 0)) arc.tension += 1;
+        if (name === "龐頭目" && ((effects.order || 0) < 0 || (effects.freedom || 0) > 0)) arc.momentum += 1;
+
+        arc.trust = Math.max(0, Math.min(100, arc.trust));
+        arc.lastChange = arcChangeLine(name, effects, reaction);
+        changes.push({ name, status: arcStatusText(arc), text: arc.lastChange });
+    });
+    gameState.lastArcChanges = changes.slice(0, 4);
+    return gameState.lastArcChanges;
+}
+
+function renderArcChanges(changes = gameState.lastArcChanges) {
+    if (!changes.length) return "";
+    return `
+        <div class="arc-change-panel">
+            <b>角色主線變化</b>
+            ${changes.slice(0, 3).map((change) => `
+                <article>
+                    ${renderAvatar(change.name, "arc-change-avatar")}
+                    <div>
+                        <span>${escapeHTML(change.name)} · ${escapeHTML(change.status)}</span>
+                        <small>${escapeHTML(change.text)}</small>
+                    </div>
+                </article>
+            `).join("")}
+        </div>`;
+}
+
 function compactText(text = "", max = 58) {
     const cleaned = polishNarrativeText(text)
         .replace(/<br\s*\/?>/gi, " ")
@@ -318,6 +778,68 @@ function effectToken(effects = {}) {
     const [key, value] = strongestEffect(effects);
     const arrow = value > 0 ? "↑" : value < 0 ? "↓" : "·";
     return `${effectLabel(key)} ${arrow}`;
+}
+
+function sceneBeat(effects = {}, reaction = {}) {
+    if ((effects.populism || 0) > 0) {
+        return {
+            type: "viral",
+            label: "社群爆量",
+            line: "截圖開始流傳。",
+            next: "下一幕：輿論反噬"
+        };
+    }
+    if ((effects.order || 0) < 0) {
+        return {
+            type: "street",
+            label: "現場升溫",
+            line: "人群往前擠。",
+            next: "下一幕：秩序壓力"
+        };
+    }
+    if ((effects.progress || 0) > 0) {
+        return {
+            type: "meeting",
+            label: "程序打開",
+            line: "有人遞出會議名單。",
+            next: "下一幕：閉門協調"
+        };
+    }
+    if ((effects.freedom || 0) < 0) {
+        return {
+            type: "silence",
+            label: "聲音退後",
+            line: "群組突然安靜。",
+            next: "下一幕：沉默代價"
+        };
+    }
+    if (reaction.tone === "oppose") {
+        return {
+            type: "block",
+            label: "有人擋路",
+            line: "反對者開始串聯。",
+            next: "下一幕：反對派集結"
+        };
+    }
+    return {
+        type: "call",
+        label: "電話響起",
+        line: "有人要你私下談。",
+        next: "下一幕：試探交換"
+    };
+}
+
+function renderSceneBeat(beat, reaction) {
+    return `
+        <div class="beat-card ${beat.type}">
+            <div class="beat-pulse"></div>
+            ${renderAvatar(reaction.npc, "beat-avatar")}
+            <div>
+                <b>${escapeHTML(beat.label)}</b>
+                <span>${escapeHTML(beat.line)}</span>
+            </div>
+        </div>
+    `;
 }
 
 function choiceCostLine(choice = {}) {
@@ -408,15 +930,19 @@ function buildStoryBridge(ev) {
 
 function buildEventBrief(ev) {
     const chapter = chapterInfo();
+    const hook = gameState.nextHook
+        ? `<div class="next-hook">${escapeHTML(gameState.nextHook)}</div>`
+        : "";
     return `
         <div class="chapter-strip">
             <span>${escapeHTML(chapter.label)}</span>
             <strong>第 ${gameState.currentEventIndex + 1} / ${gameState.events.length} 回合</strong>
         </div>
+        ${hook}
         <p class="event-one-line">${escapeHTML(compactText(ev.description, 64))}</p>
-        ${buildStoryBridge(ev)}
-        ${renderSceneWatchers()}
-        <div class="pressure-note">${escapeHTML(compactText(chapter.pressure, 38))}</div>
+        ${buildWhyPanel(ev)}
+        ${buildArcThread(ev)}
+        ${renderCharacterArcBoard(ev)}
     `;
 }
 
@@ -578,7 +1104,7 @@ function buildPlainDecisionRead(option, ev, effects, reaction) {
         </div>`;
 }
 
-function buildOutcomeReport(option, ev, effects, pOption, reaction) {
+function buildOutcomeReport(option, ev, effects, pOption, reaction, beat) {
     const [mainKey, mainValue] = strongestEffect(effects);
     const shortTerm = mainValue === 0
         ? "各方重新估算你。"
@@ -604,7 +1130,9 @@ function buildOutcomeReport(option, ev, effects, pOption, reaction) {
             <span>${escapeHTML(shortTerm)}</span>
             <span>${escapeHTML(hook)}</span>
         </div>
+        ${renderSceneBeat(beat, reaction)}
         ${renderInteractionDialogue(reaction, effects)}
+        ${renderArcChanges()}
         ${pOption ? `<div class="pressure-note danger">說服留下記憶。</div>` : ""}
     `;
 }
@@ -622,6 +1150,133 @@ function renderMemoryPanel() {
             `).join("")}
         </div>
     `;
+}
+
+function behaviorTraitCatalog() {
+    return {
+        assertiveness: {
+            label: "行動主導",
+            concept: "趨近動機",
+            read: "你傾向先推動局勢，讓議題因行動而被迫回應。",
+            blind: "容易低估被點名者的防衛反應。"
+        },
+        cooperation: {
+            label: "協商取向",
+            concept: "親社會取向",
+            read: "你會嘗試把對立拉回談判桌，讓人際連結成為資源。",
+            blind: "有時會讓立場看起來不夠銳利。"
+        },
+        riskTolerance: {
+            label: "風險承受",
+            concept: "不確定性容忍",
+            read: "你能接受短期混亂，換取更大的議題能見度。",
+            blind: "聲量上升時，局勢也更容易失控。"
+        },
+        institutionTrust: {
+            label: "制度信任",
+            concept: "內控傾向",
+            read: "你相信把議題放進流程，能讓改變變得可持續。",
+            blind: "程序太慢時，支持者可能覺得你被體制吸收。"
+        },
+        empathy: {
+            label: "共感敏銳",
+            concept: "觀點取替",
+            read: "你會注意誰被壓低、誰沒有被聽見，並試著重新命名問題。",
+            blind: "共感太廣時，決策焦點會被拉散。"
+        },
+        pragmatism: {
+            label: "務實整合",
+            concept: "成本效益評估",
+            read: "你會計算哪一步能把聲量換成承諾或流程。",
+            blind: "太快談交換時，容易被質疑失去原則。"
+        },
+        conflictAvoidance: {
+            label: "穩定優先",
+            concept: "損失厭惡",
+            read: "你會先降低衝突，避免局勢因一次選擇失去控制。",
+            blind: "過度避險會讓現狀偏誤變強，改革窗口也會變窄。"
+        }
+    };
+}
+
+function topBehaviorTraits(limit = 3) {
+    const catalog = behaviorTraitCatalog();
+    const entries = Object.entries(gameState.behaviorScores)
+        .map(([key, score]) => ({ key, score, ...catalog[key] }))
+        .sort((a, b) => b.score - a.score);
+    const picked = entries.filter((trait) => trait.score > 0).slice(0, limit);
+    return picked.length ? picked : entries.slice(0, limit);
+}
+
+function personalityArchetype(traits) {
+    const keys = new Set(traits.slice(0, 2).map((trait) => trait.key));
+    if (keys.has("assertiveness") && keys.has("riskTolerance")) return "高行動倡議者";
+    if (keys.has("cooperation") && keys.has("pragmatism")) return "協商型改革者";
+    if (keys.has("institutionTrust") && keys.has("pragmatism")) return "制度設計型玩家";
+    if (keys.has("empathy") && keys.has("cooperation")) return "關係修復型玩家";
+    if (keys.has("conflictAvoidance")) return "穩定優先型玩家";
+    if (keys.has("assertiveness") && keys.has("empathy")) return "價值動員型玩家";
+    return "情勢閱讀型玩家";
+}
+
+function buildBehaviorConceptLine(traits, choiceCount) {
+    const main = traits[0];
+    const second = traits[1] || traits[0];
+    const control = ["assertiveness", "institutionTrust", "pragmatism"].includes(main.key)
+        ? "你比較接近內控傾向：相信自己的介入能改變局勢。"
+        : "你對外部風險很敏感，會先評估局勢會不會反咬自己。";
+    return `${control} 你的選擇特別呈現「${main.concept}」與「${second.concept}」：在 ${choiceCount} 次關鍵選擇中，你反覆用同一種心理策略處理衝突。`;
+}
+
+function buildChoiceTimeline() {
+    if (!gameState.choiceHistory.length) return "";
+    return `
+        <div class="choice-timeline">
+            ${gameState.choiceHistory.slice(-3).map((choice) => `
+                <article>
+                    <span>${escapeHTML(choice.chapter.replace(/：.*/, ""))}</span>
+                    <b>${escapeHTML(compactText(choice.choiceText, 24))}</b>
+                    <small>${escapeHTML(choice.effect)} · ${escapeHTML(choice.beat)}</small>
+                </article>
+            `).join("")}
+        </div>`;
+}
+
+function buildPersonalityAnalysis() {
+    const history = gameState.choiceHistory;
+    if (!history.length) {
+        return `
+            <section class="personality-report">
+                <h3>玩家個性特質解析</h3>
+                <p>這次沒有足夠的選擇紀錄可以分析。下一輪只要完成幾個關鍵抉擇，結局就會依照你的行為軌跡生成側寫。</p>
+            </section>`;
+    }
+
+    const traits = topBehaviorTraits(3);
+    const archetype = personalityArchetype(traits);
+    const blindSpot = traits.map((trait) => trait.blind).filter(Boolean).slice(0, 2).join(" ");
+    const strongest = traits[0];
+
+    return `
+        <section class="personality-report">
+            <h3>玩家個性特質解析</h3>
+            <div class="trait-badges">
+                ${traits.map((trait) => `<span class="trait-badge">${escapeHTML(trait.label)}</span>`).join("")}
+            </div>
+            <div class="analysis-card primary">
+                <b>${escapeHTML(archetype)}</b>
+                <span>${escapeHTML(strongest.read)}</span>
+            </div>
+            <div class="analysis-card">
+                <b>心理與行為解讀</b>
+                <span>${escapeHTML(buildBehaviorConceptLine(traits, history.length))}</span>
+            </div>
+            <div class="analysis-card">
+                <b>可能盲點</b>
+                <span>${escapeHTML(blindSpot)} 這是遊戲內行為側寫，不是臨床診斷。</span>
+            </div>
+            ${buildChoiceTimeline()}
+        </section>`;
 }
 
 // DOM 元素參考
@@ -645,10 +1300,12 @@ const els = {
     eventDesc: document.getElementById('event-desc'),
     btnOptA: document.getElementById('btn-opt-a'),
     btnOptB: document.getElementById('btn-opt-b'),
+    closeEventModalBtn: document.getElementById('close-event-modal'),
     
     newsFlash: document.getElementById('news-flash'),
     newsText: document.getElementById('news-text'),
     nextTurnBtn: document.getElementById('next-turn-btn'),
+    closeNewsModalBtn: document.getElementById('close-news-modal'),
     
     endScreen: document.getElementById('end-screen'),
     endText: document.getElementById('end-text'),
@@ -692,6 +1349,12 @@ els.triggerEventBtn.addEventListener('click', showEvent);
 els.btnOptA.addEventListener('click', () => handleDecision(0));
 els.btnOptB.addEventListener('click', () => handleDecision(1));
 els.nextTurnBtn.addEventListener('click', nextTurn);
+els.closeEventModalBtn?.addEventListener('click', () => {
+    els.eventModal.classList.add('hidden');
+    clearMapHighlights();
+    els.triggerEventBtn.classList.remove('hidden');
+});
+els.closeNewsModalBtn?.addEventListener('click', nextTurn);
 els.toggleNetworkBtn.addEventListener('click', () => els.networkModal.classList.remove('hidden'));
 els.closeNetworkBtn.addEventListener('click', () => els.networkModal.classList.add('hidden'));
 els.closeDetailBtn.addEventListener('click', () => els.detailModal.classList.add('hidden'));
@@ -786,10 +1449,13 @@ function showDetailModal(title, desc, imgSrc, relationships, stances, imageFileN
         els.detailImage.style.display = 'none';
     }
     
-    if (relationships || stances) {
+    const arc = gameState.characterArcs?.[title] || null;
+    if (relationships || stances || arc) {
         els.detailExtra.style.display = 'block';
-        els.detailRelationships.innerText = relationships || "無特別關聯。";
-        els.detailStances.innerText = stances || "中立。";
+        els.detailRelationships.innerText = relationships || arc?.goal || "無特別關聯。";
+        els.detailStances.innerText = arc
+            ? `${stances || "中立。"}\n\n角色主線：${arc.goal}\n目前狀態：${arcStatusText(arc)}\n最近變化：${arc.lastChange}`
+            : (stances || "中立。");
     } else {
         els.detailExtra.style.display = 'none';
     }
@@ -802,12 +1468,19 @@ function renderNetwork() {
     gameState.characters.forEach(c => {
         let imgSrc = c.image_filename ? imagePath(c.image_filename, '') : '';
         let imgHtml = imgSrc ? `<img src="${imgSrc}" data-image-file="${c.image_filename}" alt="${c.name}" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">` : '';
+        const arc = gameState.characterArcs?.[c.name] || null;
+        const arcHtml = arc ? `
+            <div class="network-arc">
+                <b>${escapeHTML(arcStatusText(arc))}</b>
+                <span>${escapeHTML(compactText(arc.goal, 42))}</span>
+            </div>` : "";
         els.networkGrid.innerHTML += `
             <div class="char-card" style="text-align: center;">
                 ${imgHtml}
                 <h4>${c.name}</h4>
                 <span class="role">${c.role}</span>
                 <p style="text-align: left;">${c.description}</p>
+                ${arcHtml}
             </div>
         `;
     });
@@ -825,8 +1498,13 @@ async function startGame() {
     if(gameState.events.length === 0) return alert("沒有事件資料！");
 
     gameState.playerName = name;
+    gameState.currentEventIndex = 0;
+    gameState.stats = { freedom: 50, order: 50, progress: 50, populism: 20 };
+    gameState.pendingDecision = null;
     gameState.memories = [];
     gameState.lastOutcome = null;
+    gameState.nextHook = null;
+    resetBehaviorTracking();
     
     // 隨機分配可玩角色
     const playableChars = gameState.characters.filter(c => c.is_playable);
@@ -857,15 +1535,17 @@ async function startGame() {
         gameState.npcApprovals["龐頭目"] = 40;
         gameState.npcApprovals["莉亞記者"] = 40;
     }
+    initializeCharacterArcs();
+    renderNetwork();
     
     // 隨機安插新聞事件與過濾專屬事件
-    const normalEvents = gameState.events.filter(e => {
+    const normalEvents = smoothStoryEvents(gameState.events.filter(e => {
         if (e.is_news) return false;
         if (e.target_role && e.target_role !== gameState.character.name && e.target_role !== gameState.character.role) {
             return false; // 過濾掉不屬於自己角色的專屬事件
         }
         return true;
-    });
+    }));
     const newsEvents = gameState.events.filter(e => e.is_news).sort(() => 0.5 - Math.random());
     
     // 將新聞平均插入正常事件之間
@@ -1116,7 +1796,10 @@ function nextTurn() {
     if (gameState.currentEventIndex >= gameState.events.length) {
         // 如果沒有下一個事件了，也顯示按鈕，點擊後會進入結局
         els.triggerEventBtn.innerText = "查看結局";
+    } else {
+        els.triggerEventBtn.innerText = gameState.nextHook || "推進時間";
     }
+    els.nextTurnBtn.innerText = "確認";
     els.triggerEventBtn.classList.remove('hidden');
 }
 
@@ -1145,7 +1828,7 @@ async function endGame() {
             </div>
         `).join("")}</div>`
         : "";
-    els.endText.innerHTML = `<p>${escapeHTML(ending)}</p>${remembered}`;
+    els.endText.innerHTML = `<p>${escapeHTML(ending)}</p>${buildPersonalityAnalysis()}${remembered}`;
     els.endScreen.classList.remove('hidden');
     
     // 送出數據到後端
@@ -1383,7 +2066,11 @@ function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh =
 
     updateNPCApprovalsBasedOnEffects(effects, pTarget, isPHigh);
     const reaction = buildNpcReaction(beforeApprovals, effects, pTarget, isPHigh);
+    const beat = sceneBeat(effects, reaction);
     gameState.lastOutcome = reaction;
+    gameState.nextHook = beat.next;
+    updateCharacterArcs(ev, effects, reaction, pTarget, isPHigh);
+    recordBehaviorChoice(option, ev, effects, pOption, reaction, beat);
     updateStatsUI();
     renderNPCApprovals();
     els.eventModal.classList.add('hidden');
@@ -1407,7 +2094,7 @@ function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh =
                 <strong>${escapeHTML(gameState.playerName)} 選擇了：${escapeHTML(polishNarrativeText(option.text))}</strong>
             </div>
             <p>${escapeHTML(compactText(option.result_text, 58))}</p>
-            ${buildOutcomeReport(option, ev, effects, pOption, reaction)}
+            ${buildOutcomeReport(option, ev, effects, pOption, reaction, beat)}
         `;
         if (pOption) {
             newsHTML += `<div class="pressure-note danger"><strong>說服</strong> ${escapeHTML(compactText(pOption.result_text, 42))}</div>`;
@@ -1425,5 +2112,6 @@ function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh =
         els.newsStatChanges.innerHTML = statChangesHtml;
     }
 
+    els.nextTurnBtn.innerText = beat.next || "確認";
     els.newsFlash.classList.remove('hidden');
 }
