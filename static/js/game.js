@@ -3,6 +3,47 @@ const API_BASE = window.API_BASE_URL || "";
 const apiFetch = (path, options) => fetch(`${API_BASE}${path}`, options);
 const ASSET_BASE = window.ASSET_BASE_URL || "./";
 const REMOTE_ASSET_BASE = window.REMOTE_ASSET_BASE_URL || API_BASE;
+const KNOWN_IMAGE_FILES = new Set([
+    "char_ceo.png",
+    "char_civil_servant.png",
+    "char_councilor.png",
+    "char_elder.png",
+    "char_general.png",
+    "char_generic.png",
+    "char_influencer.png",
+    "char_journalist.png",
+    "char_mayor.png",
+    "char_professor.png",
+    "char_student.png",
+    "char_union.png",
+    "city_map.png",
+    "event_bribe.png",
+    "event_education.png",
+    "event_energy.png",
+    "event_fakenews.png",
+    "event_marriage.png",
+    "event_military.png",
+    "event_pollution.png",
+    "event_ubi.png",
+    "event_wage.png",
+    "news_accident.png",
+    "news_media.png",
+    "news_scandal.png"
+]);
+const CHARACTER_IMAGE_BY_NAME = {
+    "柯爾市長": "char_mayor.png",
+    "莫長老": "char_elder.png",
+    "艾達議員": "char_councilor.png",
+    "威廉總裁": "char_ceo.png",
+    "莉亞記者": "char_journalist.png",
+    "龐頭目": "char_union.png",
+    "雷將軍": "char_general.png",
+    "費教授": "char_professor.png",
+    "蘇網紅": "char_influencer.png",
+    "學生運動者": "char_student.png",
+    "基層公務員": "char_civil_servant.png",
+    "中小企業主": "char_ceo.png"
+};
 
 function normalizeBaseUrl(base) {
     if (!base) return "";
@@ -20,8 +61,51 @@ function normalizeImageName(fileName, fallback = "") {
         .replace(/^images\//i, "");
 }
 
+function imageAliasFromText(text = "", fallback = "") {
+    const value = String(text || "").toLowerCase();
+    const pairs = [
+        [/mayor|市長|柯爾/, "char_mayor.png"],
+        [/elder|長老|莫長老/, "char_elder.png"],
+        [/council|議員|艾達/, "char_councilor.png"],
+        [/ceo|總裁|企業|威廉/, "char_ceo.png"],
+        [/journal|reporter|記者|莉亞/, "char_journalist.png"],
+        [/union|工會|頭目|龐頭目/, "char_union.png"],
+        [/general|軍|將軍|雷將軍/, "char_general.png"],
+        [/professor|教授|費教授/, "char_professor.png"],
+        [/influencer|網紅|蘇網紅/, "char_influencer.png"],
+        [/student|學生/, "char_student.png"],
+        [/civil|公務/, "char_civil_servant.png"],
+        [/wage|salary|工資|薪資|罷工/, "event_wage.png"],
+        [/education|school|學生|教育|校園/, "event_education.png"],
+        [/energy|能源/, "event_energy.png"],
+        [/pollution|污染|環境/, "event_pollution.png"],
+        [/fakenews|fake|media|網路|假消息|言論|新聞/, "event_fakenews.png"],
+        [/bribe|賄|黑箱|貪腐/, "event_bribe.png"],
+        [/scandal|醜聞/, "news_scandal.png"],
+        [/military|國安|軍事|安全/, "event_military.png"],
+        [/marriage|婚姻|平權|家庭/, "event_marriage.png"],
+        [/ubi|基本收入|社會福利/, "event_ubi.png"],
+        [/accident|事故|意外/, "news_accident.png"]
+    ];
+    const match = pairs.find(([pattern]) => pattern.test(value));
+    return match ? match[1] : fallback;
+}
+
+function resolveImageFile(fileName = "", fallback = "char_generic.png", context = "") {
+    const normalized = normalizeImageName(fileName);
+    if (/^(?:https?:|data:|blob:)/i.test(normalized)) return normalized;
+    if (KNOWN_IMAGE_FILES.has(normalized)) return normalized;
+
+    const aliased = imageAliasFromText(`${normalized} ${context}`, "");
+    if (aliased) return aliased;
+
+    const fallbackName = normalizeImageName(fallback);
+    if (KNOWN_IMAGE_FILES.has(fallbackName)) return fallbackName;
+    return fallbackName || "";
+}
+
 function imagePath(fileName, fallback = "char_generic.png", base = ASSET_BASE) {
-    const normalized = normalizeImageName(fileName, fallback);
+    const normalized = resolveImageFile(fileName, fallback);
     if (!normalized) return "";
     if (/^(?:https?:|data:|blob:)/i.test(normalized)) return normalized;
     return `${normalizeBaseUrl(base)}static/images/${normalized}`;
@@ -35,12 +119,17 @@ const assetPath = (path) => {
 function remoteImagePath(fileName) {
     if (!REMOTE_ASSET_BASE || /^(?:https?:|data:|blob:)/i.test(String(fileName || ""))) return "";
     const normalized = normalizeImageName(fileName);
-    return normalized ? imagePath(normalized, "", REMOTE_ASSET_BASE) : "";
+    return normalized ? `${normalizeBaseUrl(REMOTE_ASSET_BASE)}static/images/${normalized}` : "";
 }
 
 function setImageSource(img, fileName, fallbackFile = "char_generic.png", fallbackDataUri = "") {
     if (!img) return;
-    const localSrc = imagePath(fileName, fallbackFile);
+    const original = normalizeImageName(fileName);
+    const aliased = imageAliasFromText(`${original} ${img.alt || ""}`, "");
+    const resolvedFile = resolveImageFile(fileName, fallbackFile, img.alt || "");
+    const localSrc = original && !/^(?:https?:|data:|blob:)/i.test(original) && !aliased && !KNOWN_IMAGE_FILES.has(original)
+        ? `${normalizeBaseUrl(ASSET_BASE)}static/images/${original}`
+        : imagePath(resolvedFile, fallbackFile);
     const remoteSrc = remoteImagePath(fileName);
     const finalFallback = fallbackDataUri || imagePath(fallbackFile, fallbackFile);
 
@@ -159,7 +248,9 @@ function characterByName(name = "") {
 }
 
 function characterImageFile(name = "") {
-    return characterByName(name)?.image_filename || "char_generic.png";
+    const character = characterByName(name);
+    const namedFallback = CHARACTER_IMAGE_BY_NAME[name] || "char_generic.png";
+    return resolveImageFile(character?.image_filename || namedFallback, namedFallback, `${name} ${character?.role || ""}`);
 }
 
 function renderAvatar(name, className = "dialogue-avatar") {
@@ -167,9 +258,15 @@ function renderAvatar(name, className = "dialogue-avatar") {
     return `<img class="${className}" src="${imagePath(fileName, 'char_generic.png')}" data-image-file="${escapeHTML(fileName)}" alt="${escapeHTML(name)}">`;
 }
 
+function eventImageFile(event = {}) {
+    const context = `${event.title || ""} ${event.description || ""} ${event.image_filename || ""}`;
+    return resolveImageFile(event.image_filename, imageAliasFromText(context, "event_fakenews.png"), context);
+}
+
 function hydrateDynamicImages(root = document) {
     root.querySelectorAll?.("img[data-image-file]").forEach((img) => {
-        setImageSource(img, img.dataset.imageFile, "char_generic.png");
+        const fallback = img.dataset.fallbackImage || (String(img.dataset.imageFile || "").startsWith("event_") ? "event_fakenews.png" : "char_generic.png");
+        setImageSource(img, img.dataset.imageFile, fallback);
     });
 }
 
@@ -272,12 +369,13 @@ function renderWorldIntro() {
     ];
 
     return `
-        <div class="intro-grid">
+        <div class="intro-brief">
+            <b>這不是一場找正確答案的遊戲。</b>
+            <span>你會在制度不穩、資訊混亂、利益互相牽制的社會裡做選擇。每一步都可能讓某些人被看見，也讓另一些人承擔代價。</span>
+        </div>
+        <div class="intro-thread-list">
             ${cards.map(([title, body]) => `
-                <article class="intro-card">
-                    <b>${escapeHTML(title)}</b>
-                    <span>${escapeHTML(body)}</span>
-                </article>
+                <span><b>${escapeHTML(title)}</b>${escapeHTML(body)}</span>
             `).join("")}
         </div>`;
 }
@@ -1248,6 +1346,12 @@ function buildEventBrief(ev) {
     const hook = gameState.nextHook
         ? `<div class="next-hook">${escapeHTML(gameState.nextHook)}</div>`
         : "";
+    const lens = issueLens(ev);
+    const beat = currentArcBeat();
+    const previous = gameState.choiceHistory[gameState.choiceHistory.length - 1];
+    const previousLine = previous
+        ? `上一幕你讓「${previous.effect}」成為焦點，現在各方開始把它轉成自己的說法。`
+        : compactText(roleProfile().throughline, 54);
     return `
         <div class="chapter-strip">
             <span>${escapeHTML(chapter.label)}</span>
@@ -1255,11 +1359,27 @@ function buildEventBrief(ev) {
         </div>
         ${hook}
         <p class="event-one-line">${escapeHTML(compactText(ev.description, 64))}</p>
-        ${buildWhyPanel(ev)}
-        ${buildSceneDossier(ev)}
-        ${buildArcThread(ev)}
+        <section class="scene-brief">
+            <header>
+                <span>${escapeHTML(lens.label)}</span>
+                <b>${escapeHTML(sceneQuestion(ev))}</b>
+            </header>
+            <div class="scene-brief-grid">
+                <article>
+                    <small>為什麼現在爆發</small>
+                    <strong>${escapeHTML(lens.cause)}</strong>
+                </article>
+                <article>
+                    <small>${escapeHTML(beat.label)}</small>
+                    <strong>${escapeHTML(previousLine)}</strong>
+                </article>
+                <article>
+                    <small>這件事的代價</small>
+                    <strong>${escapeHTML(lens.stakes)}</strong>
+                </article>
+            </div>
+        </section>
         ${renderStakeholderCouncil(ev)}
-        ${renderCharacterArcBoard(ev)}
     `;
 }
 
@@ -1980,7 +2100,8 @@ function renderMapPins() {
     // 渲染人物前，先確保不清除掉已經加入的 hotspots
     // 所以改用 createElement 方式加入
     gameState.characters.forEach(c => {
-        let imgSrc = imagePath(c.image_filename, 'char_generic.png');
+        const imageFile = characterImageFile(c.name);
+        let imgSrc = imagePath(imageFile, 'char_generic.png');
         
         const pin = document.createElement('div');
         pin.className = 'map-pin';
@@ -1991,11 +2112,11 @@ function renderMapPins() {
             <img src="${imgSrc}" alt="${c.name}">
             <div class="pin-label">${c.name}</div>
         `;
-        setImageSource(pin.querySelector('img'), c.image_filename, 'char_generic.png');
+        setImageSource(pin.querySelector('img'), imageFile, 'char_generic.png');
         
         pin.addEventListener('click', (e) => {
             e.stopPropagation();
-            showDetailModal(c.name, c.description, imgSrc, c.relationships_text, c.stances_text, c.image_filename);
+            showDetailModal(c.name, c.description, imgSrc, c.relationships_text, c.stances_text, imageFile);
         });
         
         els.worldMap.appendChild(pin);
@@ -2034,8 +2155,9 @@ function showDetailModal(title, desc, imgSrc, relationships, stances, imageFileN
 function renderNetwork() {
     els.networkGrid.innerHTML = '';
     gameState.characters.forEach(c => {
-        let imgSrc = c.image_filename ? imagePath(c.image_filename, '') : '';
-        let imgHtml = imgSrc ? `<img src="${imgSrc}" data-image-file="${c.image_filename}" alt="${c.name}" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">` : '';
+        const imageFile = characterImageFile(c.name);
+        let imgSrc = imagePath(imageFile, 'char_generic.png');
+        let imgHtml = `<img src="${imgSrc}" data-image-file="${imageFile}" alt="${c.name}" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">`;
         const arc = gameState.characterArcs?.[c.name] || null;
         const arcHtml = arc ? `
             <div class="network-arc">
@@ -2196,6 +2318,7 @@ function handleIntroNext() {
         els.introModal.classList.add('hidden');
         els.triggerEventBtn.classList.remove('hidden');
     }
+    hydrateDynamicImages(els.introDesc);
 }
 
 function updateStatsUI() {
@@ -2311,9 +2434,11 @@ function showPersuasionModal(config) {
     els.eventModal.classList.add('hidden');
     
     let targetChar = gameState.characters.find(c => c.name === config.target);
-    if (targetChar && targetChar.image_filename) {
-        setImageSource(els.persuasionTargetImg, targetChar.image_filename, 'char_generic.png');
-    }
+    setImageSource(
+        els.persuasionTargetImg,
+        targetChar ? characterImageFile(targetChar.name) : imageAliasFromText(config.target, "char_generic.png"),
+        'char_generic.png'
+    );
     els.persuasionTargetName.innerText = config.target;
     els.persuasionReason.innerText = config.reason;
     
@@ -2565,10 +2690,11 @@ function showEvent() {
     clearMapHighlights();
     highlightMapCharacters([profile.ally, profile.skeptic, previous?.npc, ...stakeholders], "speaker-watch");
     els.eventTitle.innerHTML = `<span class="event-kicker">${escapeHTML(chapter.label)}</span>${escapeHTML(ev.title)}`;
+    const imageFile = eventImageFile(ev);
     setImageSource(
         els.eventImage,
-        ev.image_filename,
-        "",
+        imageFile,
+        imageFile || "event_fakenews.png",
         eventIllustrationDataUri(ev.image_filename || ev.title)
     );
     els.eventImage.style.display = 'block';

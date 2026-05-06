@@ -643,6 +643,50 @@ body.dark-mode {
     margin-top: 12px;
 }
 
+.intro-brief,
+.intro-thread-list,
+.scene-brief {
+    background: rgba(255,255,255,0.68);
+    border: 1px solid rgba(56, 111, 143, 0.18);
+    border-left: 4px solid var(--primary);
+    border-radius: 10px;
+    color: #314150;
+    display: grid;
+    gap: 8px;
+    line-height: 1.5;
+    margin-top: 12px;
+    padding: 12px;
+}
+
+.intro-brief b,
+.intro-brief span,
+.intro-thread-list span {
+    display: block;
+}
+
+.intro-brief b {
+    color: var(--primary);
+}
+
+.intro-thread-list {
+    gap: 7px;
+}
+
+.intro-thread-list span {
+    border-top: 1px solid rgba(56, 111, 143, 0.12);
+    padding-top: 7px;
+}
+
+.intro-thread-list span:first-child {
+    border-top: 0;
+    padding-top: 0;
+}
+
+.intro-thread-list b {
+    color: var(--primary);
+    margin-right: 8px;
+}
+
 .intro-card,
 .cast-card {
     background: rgba(255,255,255,0.68);
@@ -734,6 +778,68 @@ body.dark-mode {
     color: #243545;
     font-size: 1.02rem;
     font-weight: 800;
+}
+
+.scene-brief {
+    margin: 10px 0;
+}
+
+.scene-brief header {
+    display: grid;
+    gap: 4px;
+}
+
+.scene-brief header span,
+.scene-brief header b {
+    display: block;
+}
+
+.scene-brief header span {
+    color: var(--primary);
+    font-size: 0.82rem;
+    font-weight: 900;
+}
+
+.scene-brief header b {
+    color: #253545;
+    font-size: 1rem;
+    line-height: 1.42;
+}
+
+.scene-brief-grid {
+    display: grid;
+    gap: 8px;
+}
+
+@media (min-width: 760px) {
+    .scene-brief-grid {
+        grid-template-columns: repeat(3, minmax(0, 1fr));
+    }
+}
+
+.scene-brief-grid article {
+    background: rgba(255,255,255,0.58);
+    border-radius: 8px;
+    display: grid;
+    gap: 4px;
+    padding: 9px 10px;
+}
+
+.scene-brief-grid small,
+.scene-brief-grid strong {
+    display: block;
+}
+
+.scene-brief-grid small {
+    color: var(--primary);
+    font-size: 0.76rem;
+    font-weight: 900;
+}
+
+.scene-brief-grid strong {
+    color: #314150;
+    font-size: 0.9rem;
+    line-height: 1.38;
 }
 
 .scene-dossier {
