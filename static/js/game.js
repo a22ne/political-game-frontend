@@ -140,6 +140,40 @@ function escapeHTML(value = "") {
         .replace(/'/g, "&#39;");
 }
 
+function characterByName(name = "") {
+    return gameState.characters.find((character) => character.name === name) || null;
+}
+
+function characterImageFile(name = "") {
+    return characterByName(name)?.image_filename || "char_generic.png";
+}
+
+function renderAvatar(name, className = "dialogue-avatar") {
+    const fileName = characterImageFile(name);
+    return `<img class="${className}" src="${imagePath(fileName, 'char_generic.png')}" data-image-file="${escapeHTML(fileName)}" alt="${escapeHTML(name)}">`;
+}
+
+function hydrateDynamicImages(root = document) {
+    root.querySelectorAll?.("img[data-image-file]").forEach((img) => {
+        setImageSource(img, img.dataset.imageFile, "char_generic.png");
+    });
+}
+
+function clearMapHighlights() {
+    els.worldMap?.querySelectorAll(".map-pin").forEach((pin) => {
+        pin.classList.remove("speaker-active", "speaker-watch");
+    });
+}
+
+function highlightMapCharacters(names = [], className = "speaker-active") {
+    const set = new Set(names.filter(Boolean));
+    els.worldMap?.querySelectorAll(".map-pin").forEach((pin) => {
+        if (set.has(pin.dataset.characterName)) {
+            pin.classList.add(className);
+        }
+    });
+}
+
 function roleProfile() {
     const character = gameState.character || {};
     const text = `${character.name || ""}${character.role || ""}${character.description || ""}`;
@@ -289,6 +323,48 @@ function recentMemoryLine() {
     return `<div class="memory-strip"><strong>上一個痕跡</strong><span>${escapeHTML(memory.text)}</span></div>`;
 }
 
+function watcherLine(name, role) {
+    const lines = {
+        ally: "如果你能拿出下一步，我可以試著幫你開門。",
+        skeptic: "別急著把事情推上街頭，我要先看你會不會失控。",
+        memory: "我還記得你上一次怎麼處理，這次我會盯得更緊。"
+    };
+    return lines[role] || "我在看你接下來怎麼選。";
+}
+
+function renderWatcherCard(name, role, label) {
+    return `
+        <article class="watcher-card ${role}">
+            ${renderAvatar(name, "watcher-avatar")}
+            <div>
+                <b>${escapeHTML(name)}</b>
+                <small>${escapeHTML(label)}</small>
+                <span>${escapeHTML(watcherLine(name, role))}</span>
+            </div>
+        </article>
+    `;
+}
+
+function renderSceneWatchers() {
+    const profile = roleProfile();
+    const previous = gameState.memories[gameState.memories.length - 1];
+    const watchers = [
+        { name: profile.ally, role: "ally", label: "可能伸手的人" },
+        { name: profile.skeptic, role: "skeptic", label: "正在懷疑你的人" }
+    ];
+
+    if (previous && !watchers.some((item) => item.name === previous.npc)) {
+        watchers.unshift({ name: previous.npc, role: "memory", label: "記得上一回合的人" });
+    }
+
+    return `
+        <div class="watcher-stage">
+            <div class="watcher-heading">場上目光</div>
+            ${watchers.slice(0, 3).map((item) => renderWatcherCard(item.name, item.role, item.label)).join("")}
+        </div>
+    `;
+}
+
 function buildStoryBridge(ev) {
     const profile = roleProfile();
     const previous = gameState.memories[gameState.memories.length - 1];
@@ -323,6 +399,7 @@ function buildEventBrief(ev) {
         </div>
         <p>${escapeHTML(polishNarrativeText(ev.description))}</p>
         ${buildStoryBridge(ev)}
+        ${renderSceneWatchers()}
         <div class="pressure-note">${escapeHTML(chapter.pressure)}</div>
         <div class="pressure-note muted">${escapeHTML(chapter.prompt)}</div>
         ${recentMemoryLine()}
@@ -378,6 +455,10 @@ function buildNpcReaction(beforeApprovals, effects, pTarget, isPHigh) {
 }
 
 function buildNpcInteraction(reaction, effects) {
+    return buildNpcExchange(reaction, effects).summary;
+}
+
+function buildNpcExchange(reaction, effects) {
     const [key, value] = strongestEffect(effects);
     const profile = roleProfile();
     const ally = profile.ally || "莉亞記者";
@@ -390,14 +471,70 @@ function buildNpcInteraction(reaction, effects) {
     }
 
     if (reaction.tone === "oppose") {
-        return `${actor}把你的選擇轉述給${other}，說這不是單一事件，而是你正在把${effectLabel(key)}推向${effectDirection(value)}。${other}沒有立刻表態，但開始要求你拿出更清楚的下一步。`;
+        return {
+            actor,
+            other,
+            actorLine: `這不是單一事件。他正在把${effectLabel(key)}推向${effectDirection(value)}。`,
+            otherLine: "我要看到下一步，不然我不會幫他收拾局面。",
+            summary: `${actor}把你的選擇轉述給${other}，說這不是單一事件，而是你正在把${effectLabel(key)}推向${effectDirection(value)}。${other}沒有立刻表態，但開始要求你拿出更清楚的下一步。`
+        };
     }
 
     if (reaction.tone === "support") {
-        return `${actor}願意替你打開一扇門，但${other}提醒他別太快押寶。兩人真正爭的不是你本人，而是這件事能不能被納入正式流程。`;
+        return {
+            actor,
+            other,
+            actorLine: "我可以替他打開一扇門，但他要拿出能追蹤的下一步。",
+            otherLine: "別太快押寶。場面好看，不代表制度接得住。",
+            summary: `${actor}願意替你打開一扇門，但${other}提醒他別太快押寶。兩人真正爭的不是你本人，而是這件事能不能被納入正式流程。`
+        };
     }
 
-    return `${actor}沒有站隊，只把消息轉給${other}。這代表局勢還沒定型，但下一次選擇會更難被當成偶然。`;
+    return {
+        actor,
+        other,
+        actorLine: "我還不站隊，但這次選擇不能當成偶然。",
+        otherLine: "那就看他下一步是補細節，還是繼續靠聲量。",
+        summary: `${actor}沒有站隊，只把消息轉給${other}。這代表局勢還沒定型，但下一次選擇會更難被當成偶然。`
+    };
+}
+
+function renderSpeakerSpotlight(reaction) {
+    return `
+        <div class="speaker-spotlight ${reaction.tone}">
+            ${renderAvatar(reaction.npc, "speaker-avatar")}
+            <div class="speech-bubble">
+                <b>${escapeHTML(reaction.npc)}</b>
+                <span>${escapeHTML(reaction.text)}</span>
+            </div>
+        </div>
+    `;
+}
+
+function renderInteractionDialogue(reaction, effects) {
+    const exchange = buildNpcExchange(reaction, effects);
+    return `
+        <div class="interaction-card">
+            <b>人物互動</b>
+            <div class="dialogue-pair">
+                <article>
+                    ${renderAvatar(exchange.actor, "dialogue-avatar")}
+                    <div>
+                        <strong>${escapeHTML(exchange.actor)}</strong>
+                        <span>${escapeHTML(exchange.actorLine)}</span>
+                    </div>
+                </article>
+                <article>
+                    ${renderAvatar(exchange.other, "dialogue-avatar")}
+                    <div>
+                        <strong>${escapeHTML(exchange.other)}</strong>
+                        <span>${escapeHTML(exchange.otherLine)}</span>
+                    </div>
+                </article>
+            </div>
+            <small>${escapeHTML(exchange.summary)}</small>
+        </div>
+    `;
 }
 
 function buildPlainDecisionRead(option, ev, effects, reaction) {
@@ -451,6 +588,7 @@ function buildOutcomeReport(option, ev, effects, pOption, reaction) {
                 : "這件事還沒結束，下一個願意冒險的人會決定它往哪裡走。";
 
     return `
+        ${renderSpeakerSpotlight(reaction)}
         <div class="outcome-grid">
             <article>
                 <b>短期結果</b>
@@ -465,10 +603,7 @@ function buildOutcomeReport(option, ev, effects, pOption, reaction) {
                 <span>${escapeHTML(hook)}</span>
             </article>
         </div>
-        <div class="interaction-card">
-            <b>人物互動</b>
-            <span>${escapeHTML(buildNpcInteraction(reaction, effects))}</span>
-        </div>
+        ${renderInteractionDialogue(reaction, effects)}
         ${pOption ? `<div class="pressure-note danger">這次說服留下了人情或衝突成本，之後同一個 NPC 會記得你的處理方式。</div>` : ""}
     `;
 }
@@ -617,6 +752,7 @@ function renderMapPins() {
         
         const pin = document.createElement('div');
         pin.className = 'map-pin';
+        pin.dataset.characterName = c.name;
         pin.style.left = `${c.pos.x}%`;
         pin.style.top = `${c.pos.y}%`;
         pin.innerHTML = `
@@ -1168,6 +1304,10 @@ function showEvent() {
 
     const ev = gameState.events[gameState.currentEventIndex];
     const chapter = chapterInfo();
+    const profile = roleProfile();
+    const previous = gameState.memories[gameState.memories.length - 1];
+    clearMapHighlights();
+    highlightMapCharacters([profile.ally, profile.skeptic, previous?.npc], "speaker-watch");
     els.eventTitle.innerHTML = `<span class="event-kicker">${escapeHTML(chapter.label)}</span>${escapeHTML(ev.title)}`;
     setImageSource(
         els.eventImage,
@@ -1178,6 +1318,7 @@ function showEvent() {
     els.eventImage.style.display = 'block';
     els.eventImage.alt = `${ev.title} 的事件插圖`;
     els.eventDesc.innerHTML = buildEventBrief(ev);
+    hydrateDynamicImages(els.eventDesc);
 
     if (ev.is_news) {
         formatChoiceButton(els.btnOptA, ev.options[0]);
@@ -1276,6 +1417,9 @@ function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh =
     }
 
     els.newsText.innerHTML = newsHTML;
+    hydrateDynamicImages(els.newsText);
+    clearMapHighlights();
+    highlightMapCharacters([reaction.npc], "speaker-active");
     if (els.newsStatChanges) {
         els.newsStatChanges.innerHTML = statChangesHtml;
     }

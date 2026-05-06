@@ -248,6 +248,18 @@ button:active {
     z-index: 100;
 }
 
+.map-pin.speaker-watch {
+    border-color: var(--alert);
+    box-shadow: 0 0 0 5px rgba(183, 121, 55, 0.22), 0 8px 18px rgba(0,0,0,0.28);
+}
+
+.map-pin.speaker-active {
+    border-color: var(--danger);
+    box-shadow: 0 0 0 7px rgba(183, 80, 80, 0.24), 0 10px 24px rgba(0,0,0,0.34);
+    transform: translate(-50%, -100%) scale(1.18);
+    z-index: 120;
+}
+
 .map-pin img {
     width: 100%;
     height: 100%;
@@ -615,6 +627,73 @@ body.dark-mode {
     margin-bottom: 4px;
 }
 
+.watcher-stage {
+    display: grid;
+    gap: 9px;
+    margin: 12px 0;
+}
+
+.watcher-heading {
+    color: var(--primary);
+    font-size: 0.86rem;
+    font-weight: 900;
+}
+
+.watcher-card {
+    align-items: center;
+    animation: speaker-pop 260ms ease both;
+    background: rgba(255,255,255,0.72);
+    border: 1px solid rgba(56, 111, 143, 0.18);
+    border-left: 4px solid var(--primary);
+    border-radius: 8px;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: auto 1fr;
+    padding: 10px;
+}
+
+.watcher-card.skeptic,
+.watcher-card.memory {
+    border-left-color: var(--alert);
+}
+
+.watcher-avatar,
+.speaker-avatar,
+.dialogue-avatar {
+    background: #eef3f4;
+    border: 2px solid #fff;
+    border-radius: 999px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.16);
+    flex: 0 0 auto;
+    object-fit: cover;
+}
+
+.watcher-avatar {
+    height: 48px;
+    width: 48px;
+}
+
+.watcher-card b,
+.watcher-card small,
+.watcher-card span {
+    display: block;
+}
+
+.watcher-card b {
+    color: #263746;
+}
+
+.watcher-card small {
+    color: var(--primary);
+    font-weight: 800;
+    margin: 2px 0;
+}
+
+.watcher-card span {
+    color: #425464;
+    line-height: 1.45;
+}
+
 .pressure-note.muted {
     border-left-color: var(--primary);
     color: #506273;
@@ -683,6 +762,56 @@ body.dark-mode {
     font-weight: 600;
 }
 
+.speaker-spotlight {
+    align-items: center;
+    animation: speaker-pop 300ms ease both;
+    background: rgba(255,255,255,0.78);
+    border: 1px solid rgba(56, 111, 143, 0.18);
+    border-radius: 10px;
+    display: grid;
+    gap: 12px;
+    grid-template-columns: auto 1fr;
+    margin: 12px 0;
+    padding: 12px;
+}
+
+.speaker-spotlight.oppose {
+    border-color: rgba(183, 80, 80, 0.38);
+}
+
+.speaker-avatar {
+    height: 76px;
+    width: 76px;
+}
+
+.speech-bubble {
+    background: #fff;
+    border-radius: 8px;
+    box-shadow: 0 6px 18px rgba(31, 45, 56, 0.1);
+    padding: 11px 13px;
+    position: relative;
+}
+
+.speech-bubble::before {
+    border-bottom: 8px solid transparent;
+    border-right: 10px solid #fff;
+    border-top: 8px solid transparent;
+    content: "";
+    left: -10px;
+    position: absolute;
+    top: 22px;
+}
+
+.speech-bubble b,
+.speech-bubble span {
+    display: block;
+}
+
+.speech-bubble b {
+    color: var(--primary);
+    margin-bottom: 4px;
+}
+
 .interaction-card,
 .plain-read {
     background: rgba(255,255,255,0.72);
@@ -706,6 +835,47 @@ body.dark-mode {
     margin: 0 0 6px 0;
 }
 
+.interaction-card small {
+    color: #4b5b66;
+    display: block;
+    line-height: 1.45;
+    margin-top: 10px;
+}
+
+.dialogue-pair {
+    display: grid;
+    gap: 10px;
+}
+
+.dialogue-pair article {
+    align-items: center;
+    background: rgba(255,255,255,0.62);
+    border-radius: 8px;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: auto 1fr;
+    padding: 10px;
+}
+
+.dialogue-avatar {
+    height: 46px;
+    width: 46px;
+}
+
+.dialogue-pair strong,
+.dialogue-pair span {
+    display: block;
+}
+
+.dialogue-pair strong {
+    color: #263746;
+    margin-bottom: 3px;
+}
+
+.dialogue-pair span {
+    color: #314150;
+}
+
 .plain-read ul {
     display: grid;
     gap: 7px;
@@ -717,6 +887,17 @@ body.dark-mode {
 .plain-read li {
     border-left: 3px solid rgba(56, 111, 143, 0.35);
     padding-left: 9px;
+}
+
+@keyframes speaker-pop {
+    from {
+        opacity: 0;
+        transform: translateY(8px) scale(0.98);
+    }
+    to {
+        opacity: 1;
+        transform: translateY(0) scale(1);
+    }
 }
 
 .memory-panel {
