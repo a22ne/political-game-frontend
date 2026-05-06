@@ -501,11 +501,16 @@ button:active {
     font-size: 0.82rem;
 }
 
-.network-arc span {
+.network-arc span,
+.network-arc small {
     color: #4a5965;
     font-size: 0.84rem;
     font-weight: 700;
     line-height: 1.35;
+}
+
+.network-arc small {
+    color: #5a6873;
 }
 
 /* Stable visual pass: keep saturation and illustration treatment consistent. */
@@ -580,8 +585,88 @@ body.dark-mode {
     gap: 10px;
 }
 
+.role-brief.expanded {
+    gap: 12px;
+}
+
 .role-brief p {
     margin: 0;
+}
+
+.relationship-seeds {
+    background: rgba(255,255,255,0.62);
+    border: 1px solid rgba(56, 111, 143, 0.16);
+    border-left: 4px solid var(--alert);
+    border-radius: 8px;
+    display: grid;
+    gap: 6px;
+    padding: 10px;
+}
+
+.relationship-seeds b {
+    color: #7a4d1f;
+}
+
+.relationship-seeds span {
+    color: #314150;
+    display: block;
+    font-size: 0.9rem;
+    line-height: 1.4;
+}
+
+.intro-grid,
+.opening-cast {
+    display: grid;
+    gap: 10px;
+    margin-top: 12px;
+}
+
+.intro-card,
+.cast-card {
+    background: rgba(255,255,255,0.68);
+    border: 1px solid rgba(56, 111, 143, 0.18);
+    border-left: 4px solid var(--primary);
+    border-radius: 8px;
+    color: #314150;
+    display: grid;
+    gap: 4px;
+    line-height: 1.45;
+    padding: 10px;
+}
+
+.intro-card b,
+.cast-card b {
+    color: var(--primary);
+}
+
+.intro-card span,
+.cast-card span,
+.cast-card small {
+    display: block;
+}
+
+.cast-card {
+    align-items: center;
+    grid-template-columns: auto 1fr;
+}
+
+.cast-avatar {
+    animation: avatar-idle 2.6s ease-in-out infinite;
+    background: #eef3f4;
+    border: 2px solid #fff;
+    border-radius: 999px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.14);
+    height: 48px;
+    object-fit: cover;
+    width: 48px;
+}
+
+.cast-card small {
+    color: #516270;
+    font-size: 0.84rem;
+    font-weight: 700;
+    line-height: 1.35;
+    margin-top: 3px;
 }
 
 .inbox-stack {
@@ -765,6 +850,17 @@ body.dark-mode {
     font-weight: 900;
 }
 
+.stakeholder-grid {
+    display: grid;
+    gap: 8px;
+}
+
+@media (min-width: 720px) {
+    .stakeholder-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
 .arc-card {
     align-items: center;
     animation: speaker-pop 260ms ease both;
@@ -800,7 +896,8 @@ body.dark-mode {
 
 .arc-card span,
 .arc-card b,
-.arc-card small {
+.arc-card small,
+.arc-card em {
     display: block;
 }
 
@@ -817,6 +914,15 @@ body.dark-mode {
 .arc-card small {
     color: #4a5965;
     line-height: 1.35;
+}
+
+.arc-card em {
+    color: #5a6873;
+    font-size: 0.82rem;
+    font-style: normal;
+    font-weight: 700;
+    line-height: 1.35;
+    margin-top: 3px;
 }
 
 .watcher-stage {
@@ -1111,7 +1217,8 @@ body.dark-mode {
 }
 
 .interaction-card,
-.plain-read {
+.plain-read,
+.option-analysis {
     background: rgba(255,255,255,0.72);
     border: 1px solid rgba(56, 111, 143, 0.18);
     border-left: 4px solid var(--primary);
@@ -1138,6 +1245,41 @@ body.dark-mode {
     display: block;
     line-height: 1.45;
     margin-top: 10px;
+}
+
+.option-analysis {
+    display: grid;
+    gap: 8px;
+}
+
+.option-analysis > b {
+    color: var(--primary);
+}
+
+.option-analysis article {
+    background: rgba(255,255,255,0.58);
+    border-radius: 8px;
+    display: grid;
+    gap: 3px;
+    padding: 8px 10px;
+}
+
+.option-analysis article span,
+.option-analysis article strong,
+.option-analysis small {
+    display: block;
+}
+
+.option-analysis article span {
+    color: var(--primary);
+    font-size: 0.78rem;
+    font-weight: 900;
+}
+
+.option-analysis article strong,
+.option-analysis small {
+    color: #314150;
+    line-height: 1.4;
 }
 
 .dialogue-pair {
@@ -1357,6 +1499,79 @@ body.dark-mode {
     margin: 0;
 }
 
+.relationship-closure {
+    background: rgba(255,255,255,0.7);
+    border: 1px solid rgba(56, 111, 143, 0.2);
+    border-left: 4px solid var(--alert);
+    border-radius: 10px;
+    display: grid;
+    gap: 10px;
+    margin: 14px 0;
+    padding: 12px;
+}
+
+.relationship-closure h3 {
+    color: #7a4d1f;
+    font-size: 1.08rem;
+    margin: 0;
+}
+
+.relationship-closure article {
+    align-items: center;
+    background: rgba(255,255,255,0.62);
+    border-left: 4px solid var(--alert);
+    border-radius: 8px;
+    display: grid;
+    gap: 10px;
+    grid-template-columns: auto 1fr;
+    padding: 8px;
+}
+
+.relationship-closure article.repaired,
+.relationship-closure article.repairing {
+    border-left-color: var(--steady);
+}
+
+.relationship-closure article.ruptured,
+.relationship-closure article.fraying {
+    border-left-color: var(--danger);
+}
+
+.closure-avatar {
+    animation: avatar-idle 2.6s ease-in-out infinite;
+    background: #eef3f4;
+    border: 2px solid #fff;
+    border-radius: 999px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.14);
+    height: 48px;
+    object-fit: cover;
+    width: 48px;
+}
+
+.relationship-closure span,
+.relationship-closure b,
+.relationship-closure small {
+    display: block;
+}
+
+.relationship-closure span {
+    color: var(--primary);
+    font-size: 0.82rem;
+    font-weight: 900;
+}
+
+.relationship-closure b {
+    color: #263746;
+    line-height: 1.4;
+}
+
+.relationship-closure small {
+    color: #5a6873;
+    font-weight: 700;
+    line-height: 1.35;
+    margin-top: 3px;
+}
+
 .trait-badges {
     display: flex;
     flex-wrap: wrap;
@@ -1453,7 +1668,8 @@ body.dark-mode {
 }
 
 .arc-change-panel span,
-.arc-change-panel small {
+.arc-change-panel small,
+.arc-change-panel em {
     display: block;
 }
 
@@ -1465,6 +1681,15 @@ body.dark-mode {
 .arc-change-panel small {
     color: #4a5965;
     line-height: 1.4;
+}
+
+.arc-change-panel em {
+    color: #5a6873;
+    font-size: 0.86rem;
+    font-style: normal;
+    font-weight: 800;
+    line-height: 1.4;
+    margin-top: 3px;
 }
 
 .agency-explanation {

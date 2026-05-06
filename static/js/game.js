@@ -93,8 +93,8 @@ function adaptPersuasionConfig(config) {
 
     if (isStudentPlayer() && adapted.target === "莫長老") {
         adapted.reason = "莫長老不是要「抵制一個學生」，而是擔心你的街頭倡議把社區帶進世代衝突。他正要求社區場地與長輩組織暫停支援這場行動。";
-        adapted.persuasion_high.text = "透過師長與家長代表溝通，把訴求轉成正式程序（高說服力）";
-        adapted.persuasion_low.text = "直接開直播點名批評長老守舊（低說服力）";
+        adapted.persuasion_high.text = "透過師長與家長代表溝通，把訴求轉成正式程序";
+        adapted.persuasion_low.text = "直接開直播點名批評長老守舊";
         adapted.persuasion_high.result_text = "你把衝突從「學生對抗長輩」改成「如何讓訴求進入正式程序」。莫長老仍保留立場，但同意先讓代表旁聽協調，反彈暫時降溫。";
         adapted.persuasion_low.result_text = "公開點名讓支持者覺得痛快，也讓保守社群更防衛。議題焦點從具體改革滑向世代對立，後續溝通成本升高。";
     }
@@ -262,6 +262,162 @@ function renderInbox(profile = roleProfile()) {
         </div>`;
 }
 
+function renderWorldIntro() {
+    const cards = [
+        ["威權退場後", "蓬萊共和國重新有了選舉、議會與媒體，但人民對制度的信任還沒有長回來。"],
+        ["街頭與議會", "街頭能讓痛苦被看見，議會能把訴求寫成規則；兩者彼此需要，也彼此懷疑。"],
+        ["媒體與網路", "每個事件都會被剪輯、轉傳與重新命名。真相不是消失，而是常常被情緒蓋住。"],
+        ["舊利益與新世代", "改革不是一句口號。它會改變誰付錢、誰失去權力、誰第一次被聽見。"]
+    ];
+
+    return `
+        <div class="intro-grid">
+            ${cards.map(([title, body]) => `
+                <article class="intro-card">
+                    <b>${escapeHTML(title)}</b>
+                    <span>${escapeHTML(body)}</span>
+                </article>
+            `).join("")}
+        </div>`;
+}
+
+function roleLeverage() {
+    const character = gameState.character || {};
+    const text = `${character.name || ""}${character.role || ""}${character.description || ""}`;
+    if (text.includes("學生")) return "街頭動員、社群擴散、青年組織，以及把抽象不公變成具體故事的能力。";
+    if (text.includes("企業") || text.includes("業主")) return "就業、人脈、資源與地方經濟話語權。你能讓政策成本變得可見。";
+    if (text.includes("公務")) return "程序知識、內部資訊與執行經驗。你知道制度在哪裡會卡住。";
+    return "你的關係網、公開形象與判斷力。你能把分散的人與事件連成一條線。";
+}
+
+function allNpcNames() {
+    return [
+        "柯爾市長",
+        "莫長老",
+        "艾達議員",
+        "威廉總裁",
+        "莉亞記者",
+        "龐頭目",
+        "雷將軍",
+        "費教授",
+        "蘇網紅"
+    ].filter((name) => name !== gameState.character?.name);
+}
+
+function playerRelationshipSeed(name = "") {
+    const profile = roleProfile();
+    const character = gameState.character || {};
+    const text = `${character.name || ""}${character.role || ""}${character.description || ""}`;
+
+    if (name === profile.ally) {
+        return {
+            open: "他曾給你一個入口，但還不確定你能不能承擔後果。",
+            repair: "你把承諾轉成行動，他願意把自己的籌碼押到你身上。",
+            rupture: "你讓他承擔了代價卻沒有給出下一步，他會把門重新關上。"
+        };
+    }
+    if (name === profile.skeptic) {
+        return {
+            open: "他不是單純反對你，而是覺得你可能把局勢推過界。",
+            repair: "你證明自己不是只靠聲量，他開始承認你有處理複雜局勢的能力。",
+            rupture: "你的選擇踩中他的底線，他會把你當成必須阻止的人。"
+        };
+    }
+    if (text.includes("學生")) {
+        const studentSeeds = {
+            "柯爾市長": ["市府曾把學生陳情排到議程外，現在他必須判斷你是否真的代表群眾。", "你逼市府正面承認學生訴求，市長會把你納入正式協調。", "他認定你只會製造壓力，後續會用程序拖住你。"],
+            "莉亞記者": ["她想報導你，但還不確定你能不能提供可查證的線索。", "你給她時間線與證據，她會讓議題被更多人理解。", "她覺得你把媒體當擴音器，報導會轉向檢視你的動機。"],
+            "龐頭目": ["他欣賞你的動員力，但擔心學生最後會拋下基層。", "你讓街頭和基層利益接上，他會把組織力借給你。", "他覺得你只顧形象，會另組更激烈的行動。"]
+        };
+        if (studentSeeds[name]) {
+            const [open, repair, rupture] = studentSeeds[name];
+            return { open, repair, rupture };
+        }
+    }
+    if (text.includes("企業") || text.includes("商")) {
+        const businessSeeds = {
+            "威廉總裁": ["他願意把你帶進商會，但前提是你不要破壞企業陣線。", "你證明中小企業有自己的現實，他會把你視為談判代表。", "他覺得你背離商界共同利益，會把你排除在資源圈外。"],
+            "龐頭目": ["他把你看成資方，但也知道你不是大財團。", "你承認員工壓力並提出具體方案，他會讓街頭壓力先降下來。", "他認定你仍然站在資方一邊，會把你變成動員目標。"],
+            "莉亞記者": ["她想知道你是被成本困住，還是只是拿成本當藉口。", "你願意公開帳目與困境，她會報導中小企業的夾縫。", "你閃避問題，她會把焦點轉向企業責任。"]
+        };
+        if (businessSeeds[name]) {
+            const [open, repair, rupture] = businessSeeds[name];
+            return { open, repair, rupture };
+        }
+    }
+    if (text.includes("公務") || text.includes("政府")) {
+        const civilSeeds = {
+            "柯爾市長": ["他需要你守住流程，但你知道流程也可能被拿來卸責。", "你幫他把責任說清楚，他會讓你進入決策核心。", "你讓市府難堪，他會把責任往第一線推。"],
+            "莉亞記者": ["她懷疑你只是官方說法的一部分，但也知道你可能掌握真資料。", "你提供可查證脈絡，她會把你從官僚形象中拆出來。", "你擋住資訊，她會把你寫成體制沉默的一部分。"],
+            "雷將軍": ["他要求穩定，但你擔心安全話語會壓過公共說明。", "你讓安全與透明並行，他會承認你有治理能力。", "你挑戰他的邊界，他會要求更高層級接管。"]
+        };
+        if (civilSeeds[name]) {
+            const [open, repair, rupture] = civilSeeds[name];
+            return { open, repair, rupture };
+        }
+    }
+
+    return {
+        open: "你們之間還沒有真正攤牌，他正在觀察你會把局勢推向哪裡。",
+        repair: "你的選擇讓他看見合作空間，這段關係開始有了回應。",
+        rupture: "你的選擇讓他的成本升高，這段關係轉向防衛。"
+    };
+}
+
+function renderPlayerRelationshipThreads(profile = roleProfile()) {
+    const names = [...new Set([profile.ally, profile.skeptic, "柯爾市長", "莉亞記者"].filter(Boolean))]
+        .filter((name) => name !== gameState.character?.name)
+        .slice(0, 4);
+
+    return `
+        <div class="relationship-seeds">
+            <b>未完成的關係</b>
+            ${names.map((name) => {
+                const seed = playerRelationshipSeed(name);
+                return `<span>${escapeHTML(name)}：${escapeHTML(compactText(seed.open, 38))}</span>`;
+            }).join("")}
+        </div>`;
+}
+
+function renderRoleIntro(profile = roleProfile()) {
+    return `
+        <div class="role-brief expanded">
+            <strong>【${escapeHTML(gameState.character.role)}】</strong>
+            <p>${escapeHTML(gameState.character.description)}</p>
+            <div><b>你的位置：</b>你不是旁觀者，而是被不同陣營拉扯的人。你的每一次表態都會被支持者、反對者與媒體重新解讀。</div>
+            <div><b>你真正想改變：</b>${escapeHTML(profile.desire)}</div>
+            <div><b>你最怕失去：</b>${escapeHTML(profile.fear)}</div>
+            <div><b>你手上的籌碼：</b>${escapeHTML(roleLeverage())}</div>
+            <div><b>你的主線：</b>${escapeHTML(profile.throughline)}</div>
+            ${renderPlayerRelationshipThreads(profile)}
+        </div>
+    `;
+}
+
+function renderOpeningCast(profile = roleProfile()) {
+    const names = [...new Set([profile.ally, profile.skeptic, "柯爾市長", "莉亞記者"].filter(Boolean))]
+        .filter((name) => name !== gameState.character?.name)
+        .slice(0, 4);
+
+    return `
+        <div class="opening-cast">
+            ${names.map((name) => {
+                const arc = ensureCharacterArc(name);
+                return `
+                    <article class="cast-card">
+                        ${renderAvatar(name, "cast-avatar")}
+                        <div>
+                            <b>${escapeHTML(name)}</b>
+                            <span>${escapeHTML(compactText(arc.goal, 42))}</span>
+                            <small>未完成：${escapeHTML(compactText(arc.relation.open, 38))}</small>
+                        </div>
+                    </article>`;
+            }).join("")}
+        </div>
+        <div class="pressure-note muted">這些人不是單純的支持或反對。他們都有自己的目標，會根據你的選擇改變態度。</div>
+    `;
+}
+
 function chapterInfo() {
     const total = Math.max(gameState.events.length, 1);
     const turn = gameState.currentEventIndex + 1;
@@ -407,9 +563,9 @@ function storyThreadLine(effects = {}, reaction = {}) {
 
     const consequence = {
         freedom: value > 0 ? "公共發聲被打開，反對者會要求你證明不是只會喊口號。" : "場面安靜下來，但支持者會追問你是不是退讓。",
-        order: value > 0 ? "秩序暫時穩住，接下來要把降溫換成具體承諾。" : "街頭壓力升高，接下來必須處理失控風險。",
-        progress: value > 0 ? "議題進入流程，下一步要找到願意承擔的人。" : "改革退回舊路徑，下一步要重新打開政策窗口。",
-        populism: value > 0 ? "聲量快速擴散，下一步要面對反彈與誤讀。" : "情緒被降溫，下一步要避免議題跟著消失。"
+        order: value > 0 ? "秩序暫時穩住，降溫能不能變成承諾仍未確定。" : "街頭壓力升高，失控風險被更多人看見。",
+        progress: value > 0 ? "議題進入流程，承擔責任的人也開始被點名。" : "改革退回舊路徑，政策窗口變得更窄。",
+        populism: value > 0 ? "聲量快速擴散，反彈與誤讀也跟著放大。" : "情緒被降溫，但議題是否被看見仍未確定。"
     }[key];
 
     if (reaction.tone === "oppose") return `${consequence} ${reaction.npc}會成為新的阻力。`;
@@ -545,9 +701,14 @@ function initializeCharacterArcs() {
     names.forEach((name) => {
         gameState.characterArcs[name] = {
             ...characterArcDefaults(name),
+            relation: playerRelationshipSeed(name),
+            relationState: "open",
+            relationText: playerRelationshipSeed(name).open,
             trust: gameState.npcApprovals[name] ?? 50,
             momentum: 0,
             tension: 0,
+            appearanceCount: 0,
+            lastSeenTurn: -1,
             lastChange: "還在觀望你的第一步。"
         };
     });
@@ -559,9 +720,14 @@ function ensureCharacterArc(name = "") {
     if (!gameState.characterArcs[name]) {
         gameState.characterArcs[name] = {
             ...characterArcDefaults(name),
+            relation: playerRelationshipSeed(name),
+            relationState: "open",
+            relationText: playerRelationshipSeed(name).open,
             trust: gameState.npcApprovals[name] ?? 50,
             momentum: 0,
             tension: 0,
+            appearanceCount: 0,
+            lastSeenTurn: -1,
             lastChange: "剛被捲入局勢。"
         };
     }
@@ -627,14 +793,35 @@ function issueLens(event = {}) {
 }
 
 function involvedCharactersForEvent(event = {}, reaction = null, pTarget = null) {
-    const names = [
+    const preferred = [
         pTarget,
         reaction?.npc,
         ...issueLens(event).actors,
         roleProfile().ally,
         roleProfile().skeptic
     ].filter(Boolean);
-    return [...new Set(names)].filter((name) => name !== gameState.character?.name).slice(0, 4);
+    const names = [...new Set(preferred)].filter((name) => name !== gameState.character?.name);
+    const needed = Math.max(0, 6 - names.length);
+    const fillers = allNpcNames()
+        .filter((name) => !names.includes(name))
+        .sort((a, b) => {
+            const arcA = ensureCharacterArc(a);
+            const arcB = ensureCharacterArc(b);
+            return (arcA.appearanceCount || 0) - (arcB.appearanceCount || 0);
+        })
+        .slice(0, needed);
+    return [...names, ...fillers].slice(0, 6);
+}
+
+function markStakeholderAppearances(names = []) {
+    names.forEach((name) => {
+        const arc = ensureCharacterArc(name);
+        if (!arc) return;
+        if (arc.lastSeenTurn !== gameState.currentEventIndex) {
+            arc.appearanceCount += 1;
+            arc.lastSeenTurn = gameState.currentEventIndex;
+        }
+    });
 }
 
 function buildWhyPanel(event = {}) {
@@ -655,11 +842,48 @@ function buildWhyPanel(event = {}) {
 
 function arcStatusText(arc) {
     if (!arc) return "觀望中";
+    if (arc.relationState === "repaired") return "關係修復";
+    if (arc.relationState === "ruptured") return "關係決裂";
     if (arc.tension >= 4) return "準備反制";
     if (arc.momentum >= 4) return "主線推進";
     if (arc.trust >= 70) return "願意靠近";
     if (arc.trust <= 30) return "保持距離";
     return "觀望拉扯";
+}
+
+function relationshipStateForArc(arc) {
+    if (!arc) return "open";
+    if (arc.trust >= 68 && arc.momentum >= 3) return "repaired";
+    if (arc.trust <= 28 || arc.tension >= 5) return "ruptured";
+    if (arc.momentum >= 2) return "repairing";
+    if (arc.tension >= 2) return "fraying";
+    return "open";
+}
+
+function relationshipLineForState(arc, state = arc?.relationState) {
+    if (!arc) return "";
+    if (state === "repaired") return arc.relation.repair;
+    if (state === "ruptured") return arc.relation.rupture;
+    if (state === "repairing") return `這段關係正在被修復：${arc.relation.repair}`;
+    if (state === "fraying") return `這段關係正在惡化：${arc.relation.rupture}`;
+    return arc.relation.open;
+}
+
+function stakeholderImpactLine(name, event = {}) {
+    const lens = issueLens(event);
+    if (lens.actors.includes(name)) return `${lens.label}直接牽動他的主線。`;
+    const lines = {
+        "柯爾市長": "他會評估這件事是否威脅市府治理正當性。",
+        "莫長老": "他會看這件事會不會侵入社區日常與長輩網絡。",
+        "艾達議員": "她會尋找能不能把衝突轉成質詢或法案。",
+        "威廉總裁": "他會計算這件事會不會改變投資與成本預期。",
+        "莉亞記者": "她會追問誰在說真話、誰在轉移焦點。",
+        "龐頭目": "他會判斷街頭組織能不能換到談判位置。",
+        "雷將軍": "他會觀察這件事是否能被定義成安全問題。",
+        "費教授": "他會檢查公共討論有沒有被情緒取代。",
+        "蘇網紅": "他會尋找能不能把矛盾剪成可傳播的敘事。"
+    };
+    return lines[name] || "他會重新計算自己和你的距離。";
 }
 
 function renderCharacterArcCard(name, event = null) {
@@ -671,7 +895,8 @@ function renderCharacterArcCard(name, event = null) {
             <div>
                 <span>${escapeHTML(arcStatusText(arc))}</span>
                 <b>${escapeHTML(name)}</b>
-                <small>${escapeHTML(focus)}：${escapeHTML(compactText(arc.goal, 34))}</small>
+                <small>${escapeHTML(stakeholderImpactLine(name, event))}</small>
+                <em>${escapeHTML(focus)}：${escapeHTML(compactText(relationshipLineForState(arc), 34))}</em>
             </div>
         </article>`;
 }
@@ -681,7 +906,9 @@ function renderCharacterArcBoard(event = {}) {
     return `
         <div class="character-arc-board">
             <div class="arc-board-title">牽動角色主線</div>
-            ${names.slice(0, 3).map((name) => renderCharacterArcCard(name, event)).join("")}
+            <div class="stakeholder-grid">
+                ${names.slice(0, 6).map((name) => renderCharacterArcCard(name, event)).join("")}
+            </div>
         </div>`;
 }
 
@@ -712,6 +939,7 @@ function updateCharacterArcs(event = {}, effects = {}, reaction = {}, pTarget = 
     names.forEach((name) => {
         const arc = ensureCharacterArc(name);
         if (!arc) return;
+        const previousRelationState = arc.relationState;
 
         if (reaction.npc === name) {
             if (reaction.tone === "support") {
@@ -740,10 +968,20 @@ function updateCharacterArcs(event = {}, effects = {}, reaction = {}, pTarget = 
         if (name === "龐頭目" && ((effects.order || 0) < 0 || (effects.freedom || 0) > 0)) arc.momentum += 1;
 
         arc.trust = Math.max(0, Math.min(100, arc.trust));
+        arc.relationState = relationshipStateForArc(arc);
+        arc.relationText = relationshipLineForState(arc);
         arc.lastChange = arcChangeLine(name, effects, reaction);
-        changes.push({ name, status: arcStatusText(arc), text: arc.lastChange });
+        changes.push({
+            name,
+            status: arcStatusText(arc),
+            text: arc.lastChange,
+            relation: arc.relationText,
+            completed: ["repaired", "ruptured"].includes(arc.relationState) && arc.relationState !== previousRelationState
+        });
     });
-    gameState.lastArcChanges = changes.slice(0, 4);
+    gameState.lastArcChanges = changes
+        .sort((a, b) => Number(b.completed) - Number(a.completed))
+        .slice(0, 5);
     return gameState.lastArcChanges;
 }
 
@@ -758,6 +996,7 @@ function renderArcChanges(changes = gameState.lastArcChanges) {
                     <div>
                         <span>${escapeHTML(change.name)} · ${escapeHTML(change.status)}</span>
                         <small>${escapeHTML(change.text)}</small>
+                        <em>${escapeHTML(change.relation)}</em>
                     </div>
                 </article>
             `).join("")}
@@ -950,8 +1189,16 @@ function formatChoiceButton(button, choice) {
     if (!button || !choice) return;
     button.innerHTML = `
         <span class="choice-main">${escapeHTML(polishNarrativeText(choice.text))}</span>
-        <small>${escapeHTML(choiceCostLine(choice))}</small>
     `;
+}
+
+function neutralizePersuasionLabel(text = "") {
+    return polishNarrativeText(text)
+        .replace(/[（(][^）)]*(高|低)\s*說服力?[^）)]*[)）]/g, "")
+        .replace(/[（(][^）)]*(高|低)\s*說服[^）)]*[)）]/g, "")
+        .replace(/\s*(高|低)\s*說服力?\s*/g, "")
+        .replace(/\s+/g, " ")
+        .trim();
 }
 
 function buildNpcReaction(beforeApprovals, effects, pTarget, isPHigh) {
@@ -1104,6 +1351,53 @@ function buildPlainDecisionRead(option, ev, effects, reaction) {
         </div>`;
 }
 
+function buildOptionAnalysis(option, ev, effects, pOption, reaction) {
+    const [key, value] = strongestEffect(effects);
+    const frame = {
+        freedom: value > 0 ? "你把事件定義成「誰有權發聲」的問題。" : "你把事件暫時放回低衝突的處理方式。",
+        order: value > 0 ? "你優先處理現場穩定與可控性。" : "你接受較高的現場壓力，換取議題被看見。",
+        progress: value > 0 ? "你把訴求往制度流程推進。" : "你讓事件先停在政治交換或觀望階段。",
+        populism: value > 0 ? "你選擇放大情緒與注意力，讓事件更難被忽視。" : "你選擇降溫，避免事件被情緒綁架。",
+        balance: "你沒有明顯推高單一指標，而是讓各方繼續觀望。"
+    }[key];
+
+    const tradeoff = {
+        freedom: value > 0 ? "代價是保守派會更警戒，秩序派也會要求邊界。" : "代價是支持者可能覺得你沒有站出來。",
+        order: value > 0 ? "代價是街頭支持者可能把這看成退讓。" : "代價是反對者更容易用失序來攻擊你。",
+        progress: value > 0 ? "代價是你必須找到願意承擔責任的人，否則流程會變成空話。" : "代價是改革動能會被舊流程吸收。",
+        populism: value > 0 ? "代價是敘事會被二創、剪輯或反向利用。" : "代價是議題聲量下降後，媒體可能轉向下一個事件。",
+        balance: "代價是你暫時保留空間，但也沒有讓任何陣營真正放心。"
+    }[key];
+
+    const socialRead = reaction.tone === "oppose"
+        ? `${reaction.npc}會把這個選擇理解成威脅。`
+        : reaction.tone === "support"
+            ? `${reaction.npc}會把這個選擇理解成合作入口。`
+            : `${reaction.npc}還沒有下判斷，但會繼續觀察你是否一致。`;
+
+    const persuasionRead = pOption
+        ? `<small>說服段落：你不是只選政策，也選擇了面對衝突的語氣與關係成本。</small>`
+        : "";
+
+    return `
+        <div class="option-analysis">
+            <b>選項剖析</b>
+            <article>
+                <span>你剛才真正選的是</span>
+                <strong>${escapeHTML(frame)}</strong>
+            </article>
+            <article>
+                <span>它帶來的取捨</span>
+                <strong>${escapeHTML(tradeoff)}</strong>
+            </article>
+            <article>
+                <span>角色會怎麼讀你</span>
+                <strong>${escapeHTML(socialRead)}</strong>
+            </article>
+            ${persuasionRead}
+        </div>`;
+}
+
 function buildOutcomeReport(option, ev, effects, pOption, reaction, beat) {
     const [mainKey, mainValue] = strongestEffect(effects);
     const shortTerm = mainValue === 0
@@ -1132,6 +1426,7 @@ function buildOutcomeReport(option, ev, effects, pOption, reaction, beat) {
         </div>
         ${renderSceneBeat(beat, reaction)}
         ${renderInteractionDialogue(reaction, effects)}
+        ${buildOptionAnalysis(option, ev, effects, pOption, reaction)}
         ${renderArcChanges()}
         ${pOption ? `<div class="pressure-note danger">說服留下記憶。</div>` : ""}
     `;
@@ -1276,6 +1571,41 @@ function buildPersonalityAnalysis() {
                 <span>${escapeHTML(blindSpot)} 這是遊戲內行為側寫，不是臨床診斷。</span>
             </div>
             ${buildChoiceTimeline()}
+        </section>`;
+}
+
+function relationshipPriority(arc) {
+    if (!arc) return 0;
+    const completed = ["repaired", "ruptured"].includes(arc.relationState) ? 10 : 0;
+    return completed + (arc.momentum || 0) + (arc.tension || 0) + Math.abs((arc.trust || 50) - 50) / 20 + (arc.appearanceCount || 0) / 2;
+}
+
+function buildRelationshipClosureReport() {
+    const entries = Object.entries(gameState.characterArcs || {})
+        .filter(([name]) => name !== gameState.character?.name)
+        .map(([name, arc]) => {
+            arc.relationState = relationshipStateForArc(arc);
+            arc.relationText = relationshipLineForState(arc);
+            return { name, arc };
+        })
+        .sort((a, b) => relationshipPriority(b.arc) - relationshipPriority(a.arc))
+        .slice(0, 5);
+
+    if (!entries.length) return "";
+
+    return `
+        <section class="relationship-closure">
+            <h3>關係線收束</h3>
+            ${entries.map(({ name, arc }) => `
+                <article class="${escapeHTML(arc.relationState)}">
+                    ${renderAvatar(name, "closure-avatar")}
+                    <div>
+                        <span>${escapeHTML(name)} · ${escapeHTML(arcStatusText(arc))}</span>
+                        <b>${escapeHTML(relationshipLineForState(arc))}</b>
+                        <small>出場 ${arc.appearanceCount || 0} 次 · 信任 ${Math.round(arc.trust)}</small>
+                    </div>
+                </article>
+            `).join("")}
         </section>`;
 }
 
@@ -1473,6 +1803,7 @@ function renderNetwork() {
             <div class="network-arc">
                 <b>${escapeHTML(arcStatusText(arc))}</b>
                 <span>${escapeHTML(compactText(arc.goal, 42))}</span>
+                <small>${escapeHTML(compactText(relationshipLineForState(arc), 42))}</small>
             </div>` : "";
         els.networkGrid.innerHTML += `
             <div class="char-card" style="text-align: center;">
@@ -1602,21 +1933,21 @@ function handleIntroNext() {
         els.introTitle.innerText = "蓬萊共和國的現況";
         els.introDesc.innerHTML = `
             <p>這個島國剛從威權陰影裡走出來，制度看似完整，信任卻很薄。每一次改革都會撞到舊利益、身份認同與媒體聲量。</p>
-            <p>你不是掌控全局的人。你只是站在局勢中間，被支持者、反對者、朋友與利益交換推著往前走。</p>
+            ${renderWorldIntro()}
         `;
         introStep++;
     } else if (introStep === 1) {
-        els.introTitle.innerText = "你的身份：" + gameState.character.name;
+        els.introTitle.innerText = "場上的人都想要什麼";
         els.introDesc.innerHTML = `
-            <div class="role-brief">
-                <strong>【${escapeHTML(gameState.character.role)}】</strong>
-                <p>${escapeHTML(gameState.character.description)}</p>
-                <div><b>你想要：</b>${escapeHTML(profile.desire)}</div>
-                <div><b>你害怕：</b>${escapeHTML(profile.fear)}</div>
-            </div>
+            <p>你不是掌控全局的人。你只是站在局勢中間，被支持者、反對者、朋友與利益交換推著往前走。</p>
+            ${renderOpeningCast(profile)}
         `;
         introStep++;
     } else if (introStep === 2) {
+        els.introTitle.innerText = "你的身份：" + gameState.character.name;
+        els.introDesc.innerHTML = renderRoleIntro(profile);
+        introStep++;
+    } else if (introStep === 3) {
         els.introTitle.innerText = "今天早上的三則訊息";
         els.introDesc.innerHTML = `
             ${renderInbox(profile)}
@@ -1748,8 +2079,8 @@ function showPersuasionModal(config) {
     els.persuasionTargetName.innerText = config.target;
     els.persuasionReason.innerText = config.reason;
     
-    els.btnPersuadeHigh.innerText = config.persuasion_high.text;
-    els.btnPersuadeLow.innerText = config.persuasion_low.text;
+    els.btnPersuadeHigh.innerText = neutralizePersuasionLabel(config.persuasion_high.text);
+    els.btnPersuadeLow.innerText = neutralizePersuasionLabel(config.persuasion_low.text);
     
     els.btnPersuadeHigh.onclick = () => handlePersuasion(true);
     els.btnPersuadeLow.onclick = () => handlePersuasion(false);
@@ -1828,7 +2159,8 @@ async function endGame() {
             </div>
         `).join("")}</div>`
         : "";
-    els.endText.innerHTML = `<p>${escapeHTML(ending)}</p>${buildPersonalityAnalysis()}${remembered}`;
+    els.endText.innerHTML = `<p>${escapeHTML(ending)}</p>${buildRelationshipClosureReport()}${buildPersonalityAnalysis()}${remembered}`;
+    hydrateDynamicImages(els.endText);
     els.endScreen.classList.remove('hidden');
     
     // 送出數據到後端
@@ -1990,8 +2322,10 @@ function showEvent() {
     const chapter = chapterInfo();
     const profile = roleProfile();
     const previous = gameState.memories[gameState.memories.length - 1];
+    const stakeholders = involvedCharactersForEvent(ev);
+    markStakeholderAppearances(stakeholders);
     clearMapHighlights();
-    highlightMapCharacters([profile.ally, profile.skeptic, previous?.npc], "speaker-watch");
+    highlightMapCharacters([profile.ally, profile.skeptic, previous?.npc, ...stakeholders], "speaker-watch");
     els.eventTitle.innerHTML = `<span class="event-kicker">${escapeHTML(chapter.label)}</span>${escapeHTML(ev.title)}`;
     setImageSource(
         els.eventImage,
