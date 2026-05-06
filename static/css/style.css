@@ -588,6 +588,7 @@ body.dark-mode {
     white-space: nowrap;
 }
 
+.story-bridge,
 .pressure-note,
 .memory-strip {
     background: rgba(255,255,255,0.68);
@@ -597,6 +598,21 @@ body.dark-mode {
     line-height: 1.55;
     margin: 10px 0;
     padding: 10px 12px;
+}
+
+.story-bridge {
+    border-left-color: var(--primary);
+    background: rgba(56, 111, 143, 0.08);
+}
+
+.story-bridge b,
+.story-bridge span {
+    display: block;
+}
+
+.story-bridge b {
+    color: var(--primary);
+    margin-bottom: 4px;
 }
 
 .pressure-note.muted {
@@ -665,6 +681,42 @@ body.dark-mode {
     color: #314150;
     font-size: 0.98rem;
     font-weight: 600;
+}
+
+.interaction-card,
+.plain-read {
+    background: rgba(255,255,255,0.72);
+    border: 1px solid rgba(56, 111, 143, 0.18);
+    border-left: 4px solid var(--primary);
+    border-radius: 8px;
+    color: #314150;
+    line-height: 1.58;
+    margin: 12px 0;
+    padding: 12px;
+}
+
+.interaction-card b,
+.interaction-card span {
+    display: block;
+}
+
+.interaction-card b,
+.plain-read h4 {
+    color: var(--primary);
+    margin: 0 0 6px 0;
+}
+
+.plain-read ul {
+    display: grid;
+    gap: 7px;
+    list-style: none;
+    margin: 0;
+    padding: 0;
+}
+
+.plain-read li {
+    border-left: 3px solid rgba(56, 111, 143, 0.35);
+    padding-left: 9px;
 }
 
 .memory-panel {

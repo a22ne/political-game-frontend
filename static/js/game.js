@@ -148,6 +148,7 @@ function roleProfile() {
         return {
             desire: "讓受傷的人得到制度回應，同時避免運動被貼上失控標籤。",
             fear: "支持者覺得你太軟，長輩與校方又覺得你在煽動。",
+            throughline: "你的主線不是贏一次抗議，而是把街頭壓力變成校方或市府必須回應的程序。",
             ally: "艾達議員",
             skeptic: "莫長老",
             inbox: [
@@ -162,6 +163,7 @@ function roleProfile() {
         return {
             desire: "保住員工與生意，也不想被大財團或街頭輿論綁架。",
             fear: "一邊罵你剝削，一邊逼你表態；任何選擇都可能傷到現金流。",
+            throughline: "你的主線是在生存壓力下證明自己不是財團棋子，也不是只會安撫員工的老闆。",
             ally: "威廉總裁",
             skeptic: "龐頭目",
             inbox: [
@@ -176,6 +178,7 @@ function roleProfile() {
         return {
             desire: "讓制度撐住，不讓上級卸責，也不讓第一線成為代罪羔羊。",
             fear: "文件流程太慢，輿論太快；你可能同時得罪長官與民眾。",
+            throughline: "你的主線是在官僚體系裡找出能簽字、能負責、能把話說清楚的人。",
             ally: "柯爾市長",
             skeptic: "莉亞記者",
             inbox: [
@@ -189,6 +192,7 @@ function roleProfile() {
     return {
         desire: "在多方壓力中保住自己的立場，並讓議題不要被單一派系吞掉。",
         fear: "你越想居中協調，越可能被兩邊同時懷疑。",
+        throughline: "你的主線是在不同陣營互不信任時，找出一條還能被討論的公共路徑。",
         ally: "莉亞記者",
         skeptic: "雷將軍",
         inbox: [
@@ -250,6 +254,22 @@ function strongestEffect(effects = {}) {
     return entries.sort((a, b) => Math.abs(b[1]) - Math.abs(a[1]))[0];
 }
 
+function effectLabel(key) {
+    return {
+        freedom: "公共發聲",
+        order: "秩序與安全",
+        progress: "制度改革",
+        populism: "情緒動員",
+        balance: "局勢平衡"
+    }[key] || key;
+}
+
+function effectDirection(value) {
+    if (value > 0) return "上升";
+    if (value < 0) return "下降";
+    return "沒有明顯變化";
+}
+
 function choiceCostLine(choice = {}) {
     const effects = choice.effects || {};
     const [key, value] = strongestEffect(effects);
@@ -269,6 +289,31 @@ function recentMemoryLine() {
     return `<div class="memory-strip"><strong>上一個痕跡</strong><span>${escapeHTML(memory.text)}</span></div>`;
 }
 
+function buildStoryBridge(ev) {
+    const profile = roleProfile();
+    const previous = gameState.memories[gameState.memories.length - 1];
+
+    if (!previous) {
+        return `
+            <div class="story-bridge">
+                <b>主線</b>
+                <span>${escapeHTML(profile.throughline)}</span>
+            </div>`;
+    }
+
+    const connector = previous.tone === "oppose"
+        ? `${previous.npc}的反彈還沒消失，其他人會用這次事件判斷你是不是開始失控。`
+        : previous.tone === "support"
+            ? `${previous.npc}剛剛給了你一點空間，但這份善意需要下一步證明不是空話。`
+            : `${previous.npc}還在觀望，這回合會讓他決定要靠近還是退後。`;
+
+    return `
+        <div class="story-bridge">
+            <b>承接上一回合</b>
+            <span>${escapeHTML(connector)}</span>
+        </div>`;
+}
+
 function buildEventBrief(ev) {
     const chapter = chapterInfo();
     return `
@@ -277,6 +322,7 @@ function buildEventBrief(ev) {
             <strong>第 ${gameState.currentEventIndex + 1} / ${gameState.events.length} 回合</strong>
         </div>
         <p>${escapeHTML(polishNarrativeText(ev.description))}</p>
+        ${buildStoryBridge(ev)}
         <div class="pressure-note">${escapeHTML(chapter.pressure)}</div>
         <div class="pressure-note muted">${escapeHTML(chapter.prompt)}</div>
         ${recentMemoryLine()}
@@ -331,6 +377,60 @@ function buildNpcReaction(beforeApprovals, effects, pTarget, isPHigh) {
     return memory;
 }
 
+function buildNpcInteraction(reaction, effects) {
+    const [key, value] = strongestEffect(effects);
+    const profile = roleProfile();
+    const ally = profile.ally || "莉亞記者";
+    const skeptic = profile.skeptic || "莫長老";
+    const actor = reaction.npc;
+
+    let other = reaction.tone === "oppose" ? ally : skeptic;
+    if (other === actor) {
+        other = reaction.tone === "oppose" ? "莉亞記者" : "雷將軍";
+    }
+
+    if (reaction.tone === "oppose") {
+        return `${actor}把你的選擇轉述給${other}，說這不是單一事件，而是你正在把${effectLabel(key)}推向${effectDirection(value)}。${other}沒有立刻表態，但開始要求你拿出更清楚的下一步。`;
+    }
+
+    if (reaction.tone === "support") {
+        return `${actor}願意替你打開一扇門，但${other}提醒他別太快押寶。兩人真正爭的不是你本人，而是這件事能不能被納入正式流程。`;
+    }
+
+    return `${actor}沒有站隊，只把消息轉給${other}。這代表局勢還沒定型，但下一次選擇會更難被當成偶然。`;
+}
+
+function buildPlainDecisionRead(option, ev, effects, reaction) {
+    const [key, value] = strongestEffect(effects);
+    const first = value === 0
+        ? "這次選擇沒有立刻改變大局，但它讓各方重新觀察你的可信度。"
+        : `最明顯的變化是「${effectLabel(key)}」${effectDirection(value)}。`;
+
+    const second = reaction.tone === "oppose"
+        ? `${reaction.npc}會把它解讀成威脅，所以後面更可能設路障。`
+        : reaction.tone === "support"
+            ? `${reaction.npc}看見了合作空間，但他也會期待你下一步更具體。`
+            : `${reaction.npc}還在觀望，所以你還有機會改寫他對你的判斷。`;
+
+    const third = (effects.progress || 0) > 0
+        ? "下一步要找能簽字、排會議或承擔責任的人。"
+        : (effects.populism || 0) > 0
+            ? "下一步要小心聲量反過來控制議題。"
+            : (effects.order || 0) < 0
+                ? "下一步要處理失控風險，否則反對者會拿秩序當理由反擊。"
+                : "下一步要確認這不是一次性的表態，而是能延續的行動。";
+
+    return `
+        <div class="plain-read">
+            <h4>白話解讀</h4>
+            <ul>
+                <li>${escapeHTML(first)}</li>
+                <li>${escapeHTML(second)}</li>
+                <li>${escapeHTML(third)}</li>
+            </ul>
+        </div>`;
+}
+
 function buildOutcomeReport(option, ev, effects, pOption, reaction) {
     const [mainKey, mainValue] = strongestEffect(effects);
     const shortTerm = mainValue === 0
@@ -357,13 +457,17 @@ function buildOutcomeReport(option, ev, effects, pOption, reaction) {
                 <span>${escapeHTML(shortTerm)}</span>
             </article>
             <article>
-                <b>人物反應</b>
+                <b>${escapeHTML(reaction.npc)}的反應</b>
                 <span>${escapeHTML(reaction.text)}</span>
             </article>
             <article>
-                <b>後續伏筆</b>
+                <b>下一個壓力點</b>
                 <span>${escapeHTML(hook)}</span>
             </article>
+        </div>
+        <div class="interaction-card">
+            <b>人物互動</b>
+            <span>${escapeHTML(buildNpcInteraction(reaction, effects))}</span>
         </div>
         ${pOption ? `<div class="pressure-note danger">這次說服留下了人情或衝突成本，之後同一個 NPC 會記得你的處理方式。</div>` : ""}
     `;
@@ -989,23 +1093,13 @@ function conceptCard(title, body) {
 }
 
 function buildAgencyExplanation(option, ev, effects) {
-    const movement = [];
-    if ((effects.freedom || 0) > 0) movement.push("擴大可發聲的人");
-    if ((effects.order || 0) > 0) movement.push("降低混亂感並讓制度重新介入");
-    if ((effects.progress || 0) > 0) movement.push("把議題推向制度或政策改革");
-    if ((effects.populism || 0) > 0) movement.push("快速聚集情緒與注意力");
-    if ((effects.freedom || 0) < 0) movement.push("收窄公共討論空間");
-    if ((effects.order || 0) < 0) movement.push("增加街頭與制度之間的摩擦");
-    if ((effects.progress || 0) < 0) movement.push("讓改革速度放慢");
-    if ((effects.populism || 0) < 0) movement.push("讓情緒動員降溫");
-
-    const direction = movement.length ? movement.join("、") : "改變大家衡量問題的標準";
+    const [mainKey, mainValue] = strongestEffect(effects);
     const context = polishNarrativeText(`${ev.title} ${option.text} ${option.result_text} ${option.explanation}`);
 
     if (/暫時擱置|未給出實質承諾|沒有進入具體承諾/.test(context)) {
         return conceptCard(
             "政策窗口為什麼會關上",
-            `和平落幕不等於政策成功。若沒有承諾、時程、預算或負責單位，議題會從街頭退回等待狀態；這次選擇比較像把衝突暫時收束，留下日後再動員的理由，而不是立刻推動法案前進。`
+            "和平落幕只是把衝突收起來。沒有時程、負責人或預算，政策還沒有真的前進。"
         );
     }
 
@@ -1013,53 +1107,53 @@ function buildAgencyExplanation(option, ev, effects) {
     if ((effects.progress || 0) > 0) {
         candidates.push({
             title: "制度化：把訴求變成程序",
-            body: `公共議題能不能留下來，關鍵常常不是聲量，而是能否被翻成條文、會議、預算、時程或責任分工。這次選擇的重點是${direction}，讓訴求比較有機會進入可追蹤的制度流程。`
+            body: "這次選擇的重點是把口號變成流程。只要有人排會議、寫條文、訂時程，議題就比較不會散掉。"
         });
         candidates.push({
             title: "政策企業家",
-            body: `有些行動者的作用是把問題、方案和政治時機接在一起。你這次不是單純表態，而是在幫議題找到可被採納的說法與入口；因此影響集中在${direction}。`
+            body: "你做的不是喊更大聲，而是幫問題找到入口：誰能接、怎麼做、下一步去哪裡談。"
         });
     }
     if ((effects.freedom || 0) > 0) {
         candidates.push({
             title: "框架設定",
-            body: `誰能命名問題，誰就能影響大家怎麼判斷責任與成本。這次行動把焦點從單純對抗移到「這件事應該如何被理解」，所以效果落在${direction}。`
+            body: "你改變了大家描述問題的方式。問題一旦被重新命名，責任和解法也會跟著移動。"
         });
     }
     if ((effects.order || 0) > 0) {
         candidates.push({
             title: "政治機會結構",
-            body: `當制度願意開門、社會願意暫停對抗，行動才比較容易被接住。這次選擇的作用不是讓所有人服氣，而是創造一個較不混亂的入口，讓${direction}變得可能。`
+            body: "場面穩下來後，制度才有空間接住訴求。這不是勝利，而是讓下一場談判有門可進。"
         });
     }
     if ((effects.populism || 0) > 0 || (effects.order || 0) < 0) {
         candidates.push({
             title: "反彈效應",
-            body: `改革碰到身份認同、既有利益或長期不信任時，反對者會把議題改寫成威脅。這次選擇雖然製造聲量，也提高了對立成本，特別表現在${direction}。`
+            body: "聲量變大時，反對者也更容易動員。他們會把改革說成威脅，逼你先處理恐懼。"
         });
     }
     if ((effects.populism || 0) < 0) {
         candidates.push({
             title: "情緒降溫不等於問題消失",
-            body: `讓場面冷靜下來能減少誤判，但真正的矛盾仍需要後續處理。這次選擇的價值在於先降低衝突熱度，讓${direction}，避免議題被口號完全接管。`
+            body: "衝突降溫可以避免誤判，但問題還在。接下來要看誰願意處理細節。"
         });
     }
     if ((effects.freedom || 0) < 0) {
         candidates.push({
             title: "沉默螺旋",
-            body: `當表態成本變高，不代表大家改變想法，而是更多人選擇不說。這次選擇可能讓場面看起來安靜，實際上卻把分歧壓到檯面下，造成${direction}。`
+            body: "安靜不代表同意。只是更多人覺得開口有風險，於是把不滿藏起來。"
         });
     }
     if ((effects.progress || 0) < 0) {
         candidates.push({
             title: "路徑依賴",
-            body: `一旦議題被放回舊流程，後續就容易照既有慣性前進。這次選擇讓改革速度放慢，並不表示事情結束，而是讓下一次推進需要更高的組織成本。`
+            body: "事情被放回舊流程後，就會照舊慣性走。不是結束，而是下次要花更多力氣推動。"
         });
     }
 
     candidates.push({
         title: "議程設定",
-        body: `公共注意力有限，議題要被處理，必須先被看見、被排序、被賦予急迫性。這次選擇影響的是${direction}，也會改變媒體、民代和旁觀者接下來願意追問什麼。`
+        body: `公共注意力有限。這次最明顯的變化是「${effectLabel(mainKey)}」${effectDirection(mainValue)}，所以媒體和民代會跟著改問不同問題。`
     });
 
     const picked = candidates[hashText(`${ev.title}${option.text}${gameState.currentEventIndex}`) % candidates.length];
@@ -1177,13 +1271,7 @@ function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh =
             newsHTML += `<div class="pressure-note danger"><strong>說服結果</strong> ${escapeHTML(polishNarrativeText(pOption.result_text))}</div>`;
         }
 
-        if (option.explanation) {
-            newsHTML += `<hr style="border: 0; border-top: 1px dashed #ccc; margin: 15px 0;">
-            <div style="background: rgba(56, 111, 143, 0.08); padding: 12px; border-radius: 8px; border-left: 4px solid var(--primary); margin-top: 10px;">
-                <h4 style="margin: 0 0 5px 0; color: var(--primary);">決策解析</h4>
-                <span style="font-size: 0.95rem; color: #333; line-height: 1.5;">${escapeHTML(polishNarrativeText(option.explanation))}</span>
-            </div>`;
-        }
+        newsHTML += buildPlainDecisionRead(option, ev, effects, reaction);
         newsHTML += buildAgencyExplanation(option, ev, effects);
     }
 
