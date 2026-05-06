@@ -133,6 +133,7 @@ const gameState = {
     lastOutcome: null,
     nextHook: null,
     choiceHistory: [],
+    reflectionLog: [],
     behaviorScores: {
         assertiveness: 0,
         cooperation: 0,
@@ -487,6 +488,7 @@ function behaviorScoreTemplate() {
 
 function resetBehaviorTracking() {
     gameState.choiceHistory = [];
+    gameState.reflectionLog = [];
     gameState.behaviorScores = behaviorScoreTemplate();
 }
 
@@ -840,6 +842,80 @@ function buildWhyPanel(event = {}) {
         </div>`;
 }
 
+function sceneQuestion(event = {}) {
+    const lens = issueLens(event);
+    const questions = {
+        "生計壓力": "當生活撐不下去時，誰應該先承擔改革成本？",
+        "世代衝突": "當新一代要求改變時，舊社群的不安該被說服、安撫，還是被推開？",
+        "資訊戰": "當謠言與管制同時出現時，民主應該先保護自由，還是先阻止傷害？",
+        "發展代價": "當發展留下污染與風險時，誰有權決定代價能不能被接受？",
+        "安全焦慮": "當安全成為理由時，人民願意交出多少自由？",
+        "價值衝突": "當權利擴張碰到傳統生活方式時，政治該怎麼讓雙方都被看見？",
+        "信任危機": "當所有人都不相信制度時，誰還能讓公共討論重新開始？"
+    };
+    return questions[lens.label] || questions["信任危機"];
+}
+
+function buildSceneDossier(event = {}) {
+    const lens = issueLens(event);
+    const previous = gameState.choiceHistory[gameState.choiceHistory.length - 1];
+    const continuity = previous
+        ? `上一幕留下的焦點是「${previous.effect}」。這一幕，各方開始把它轉成自己的說法。`
+        : "故事剛開始，各方還不知道你會用街頭、制度、協商或聲量處理政治。";
+
+    return `
+        <div class="scene-dossier">
+            <article>
+                <span>前情</span>
+                <b>${escapeHTML(continuity)}</b>
+            </article>
+            <article>
+                <span>此刻的問題</span>
+                <b>${escapeHTML(sceneQuestion(event))}</b>
+            </article>
+            <article>
+                <span>這不是單一事件</span>
+                <b>${escapeHTML(lens.stakes)}</b>
+            </article>
+        </div>`;
+}
+
+function stakeholderVoice(name, event = {}) {
+    const lens = issueLens(event);
+    const voices = {
+        "柯爾市長": "我要知道這會不會讓市府失去控制。",
+        "莫長老": "不要把社區變成政治衝突的戰場。",
+        "艾達議員": "如果要改，就要能進入正式程序。",
+        "威廉總裁": "改革不能讓成本完全失控。",
+        "莉亞記者": "誰在說真話？誰只是改寫敘事？",
+        "龐頭目": "沒有壓力，就不會有人坐下來談。",
+        "雷將軍": "自由不能成為失序的藉口。",
+        "費教授": "先把證據與長期成本講清楚。",
+        "蘇網紅": "這件事如果說得夠簡單，就會爆。"
+    };
+    if (lens.label === "資訊戰" && name === "雷將軍") return "假消息不是意見，是安全破口。";
+    if (lens.label === "生計壓力" && name === "龐頭目") return "如果大家活不下去，秩序只是好看的字。";
+    if (lens.label === "發展代價" && name === "威廉總裁") return "太快轉彎，工廠、工作與投資都會一起掉下去。";
+    return voices[name] || "我還在看你會把局勢推向哪裡。";
+}
+
+function renderStakeholderCouncil(event = {}) {
+    const names = involvedCharactersForEvent(event);
+    return `
+        <div class="stakeholder-council">
+            <div class="council-title">場上正在互相拉扯的人</div>
+            ${names.slice(0, 5).map((name) => `
+                <article>
+                    ${renderAvatar(name, "council-avatar")}
+                    <div>
+                        <b>${escapeHTML(name)}</b>
+                        <span>${escapeHTML(stakeholderVoice(name, event))}</span>
+                    </div>
+                </article>
+            `).join("")}
+        </div>`;
+}
+
 function arcStatusText(arc) {
     if (!arc) return "觀望中";
     if (arc.relationState === "repaired") return "關係修復";
@@ -1180,7 +1256,9 @@ function buildEventBrief(ev) {
         ${hook}
         <p class="event-one-line">${escapeHTML(compactText(ev.description, 64))}</p>
         ${buildWhyPanel(ev)}
+        ${buildSceneDossier(ev)}
         ${buildArcThread(ev)}
+        ${renderStakeholderCouncil(ev)}
         ${renderCharacterArcBoard(ev)}
     `;
 }
@@ -1398,6 +1476,73 @@ function buildOptionAnalysis(option, ev, effects, pOption, reaction) {
         </div>`;
 }
 
+function politicalCostReflection(ev, option, effects, reaction) {
+    const [key, value] = strongestEffect(effects);
+    const lens = issueLens(ev);
+    const beneficiaries = {
+        freedom: value > 0 ? "原本難以發聲的人得到更多公共空間" : "需要穩定處理的人暫時少了外部壓力",
+        order: value > 0 ? "秩序派與行政系統得到喘息" : "街頭與抗議者得到更強的談判壓力",
+        progress: value > 0 ? "改革派得到制度入口" : "保守或觀望陣營得到拖延空間",
+        populism: value > 0 ? "擅長動員與傳播的人得到舞台" : "想降溫與查證的人得到空間",
+        balance: "各方暫時都沒有輸到必須翻桌"
+    }[key];
+    const payers = {
+        freedom: value > 0 ? "害怕失序的人承擔焦慮" : "等待被聽見的人承擔沉默",
+        order: value > 0 ? "街頭訴求承擔被稀釋的風險" : "一般民眾與行政系統承擔混亂成本",
+        progress: value > 0 ? "掌權者與既得利益者承擔制度改變成本" : "改革支持者承擔失望與疲乏",
+        populism: value > 0 ? "被簡化或被貼標籤的人承擔誤讀" : "需要聲量的人承擔被忽視",
+        balance: "未被明確處理的人繼續等待"
+    }[key];
+    const question = {
+        "生計壓力": "如果你是被要求承擔成本的那一方，你還會覺得這個選擇公平嗎？",
+        "世代衝突": "你剛才保護的是改變的速度，還是社群的安全感？",
+        "資訊戰": "你願意為了降低傷害，讓誰有權決定哪些話可以被說？",
+        "發展代價": "當改革看起來正確時，你有沒有看見被轉嫁成本的人？",
+        "安全焦慮": "安全感增加時，誰的自由被放到比較後面？",
+        "價值衝突": "你選擇的是說服對方，還是讓一方先退場？",
+        "信任危機": "你的選擇是在修復信任，還是在利用不信任？"
+    }[lens.label] || "這個選擇讓誰得到政治空間，又讓誰承擔代價？";
+
+    return {
+        lens: lens.label,
+        beneficiary: beneficiaries,
+        payer: payers,
+        question,
+        reaction: reaction.npc
+    };
+}
+
+function recordReflection(ev, option, effects, reaction) {
+    const reflection = politicalCostReflection(ev, option, effects, reaction);
+    gameState.reflectionLog.push({
+        turn: gameState.currentEventIndex + 1,
+        eventTitle: ev.title,
+        choiceText: polishNarrativeText(option.text),
+        ...reflection
+    });
+    gameState.reflectionLog = gameState.reflectionLog.slice(-10);
+    return reflection;
+}
+
+function renderReflectionPanel(reflection) {
+    return `
+        <div class="reflection-panel">
+            <b>政治代價反思</b>
+            <article>
+                <span>誰得到空間</span>
+                <strong>${escapeHTML(reflection.beneficiary)}</strong>
+            </article>
+            <article>
+                <span>誰承擔代價</span>
+                <strong>${escapeHTML(reflection.payer)}</strong>
+            </article>
+            <article class="question">
+                <span>留給玩家的問題</span>
+                <strong>${escapeHTML(reflection.question)}</strong>
+            </article>
+        </div>`;
+}
+
 function buildOutcomeReport(option, ev, effects, pOption, reaction, beat) {
     const [mainKey, mainValue] = strongestEffect(effects);
     const shortTerm = mainValue === 0
@@ -1417,6 +1562,8 @@ function buildOutcomeReport(option, ev, effects, pOption, reaction, beat) {
                 ? "沉默會累積不滿。"
                 : "下一步決定走向。";
 
+    const reflection = recordReflection(ev, option, effects, reaction);
+
     return `
         ${renderSpeakerSpotlight(reaction)}
         <div class="impact-row">
@@ -1428,6 +1575,7 @@ function buildOutcomeReport(option, ev, effects, pOption, reaction, beat) {
         ${renderInteractionDialogue(reaction, effects)}
         ${buildOptionAnalysis(option, ev, effects, pOption, reaction)}
         ${renderArcChanges()}
+        ${renderReflectionPanel(reflection)}
         ${pOption ? `<div class="pressure-note danger">說服留下記憶。</div>` : ""}
     `;
 }
@@ -1537,39 +1685,129 @@ function buildChoiceTimeline() {
         </div>`;
 }
 
+function politicalAxisValue(leftValue, rightValue) {
+    return Math.max(-100, Math.min(100, Math.round(leftValue - rightValue)));
+}
+
+function stanceLevel(value, highLabel, lowLabel, middleLabel = "平衡取向") {
+    if (value >= 18) return highLabel;
+    if (value <= -18) return lowLabel;
+    return middleLabel;
+}
+
+function politicalArchetype() {
+    const { freedom, order, progress, populism } = gameState.stats;
+    if (populism >= 72 && order <= 42) return "群眾動員改革派";
+    if (populism >= 72 && order >= 62) return "多數意志秩序派";
+    if (freedom >= 64 && progress >= 62) return "自由改革派";
+    if (order >= 66 && progress >= 58) return "制度治理改革派";
+    if (order >= 66 && progress <= 48) return "秩序保守派";
+    if (progress >= 68 && populism <= 45) return "程序改革派";
+    if (freedom >= 62 && order >= 58) return "權利與秩序平衡派";
+    return "協商型中間派";
+}
+
+function buildPoliticalAxisRows() {
+    const { freedom, order, progress, populism } = gameState.stats;
+    const axes = [
+        {
+            name: "自由發聲 ↔ 秩序治理",
+            value: politicalAxisValue(freedom, order),
+            left: "自由發聲",
+            right: "秩序治理",
+            read: stanceLevel(freedom - order, "你較願意讓公共發聲先打開政治空間。", "你較重視先讓局勢可控。")
+        },
+        {
+            name: "制度改革 ↔ 現狀維持",
+            value: Math.max(-100, Math.min(100, Math.round((progress - 50) * 2))),
+            left: "制度改革",
+            right: "現狀維持",
+            read: progress >= 62 ? "你傾向把衝突導入制度改變。" : progress <= 42 ? "你傾向先保留既有安排，避免改革過快。" : "你在改革與穩定之間保留彈性。"
+        },
+        {
+            name: "制度說服 ↔ 情緒動員",
+            value: Math.max(-100, Math.min(100, Math.round((50 - populism) * 2))),
+            left: "制度說服",
+            right: "情緒動員",
+            read: populism >= 62 ? "你常使用聲量與情緒壓力迫使政治回應。" : populism <= 38 ? "你傾向降低情緒，把討論拉回查證與程序。" : "你會視情況在聲量與程序之間切換。"
+        }
+    ];
+
+    return axes.map((axis) => {
+        const leftWidth = 50 + axis.value / 2;
+        return `
+            <article class="spectrum-row">
+                <div class="spectrum-head">
+                    <b>${escapeHTML(axis.name)}</b>
+                    <span>${escapeHTML(axis.read)}</span>
+                </div>
+                <div class="spectrum-track">
+                    <small>${escapeHTML(axis.left)}</small>
+                    <div class="spectrum-bar"><i style="left: ${leftWidth}%;"></i></div>
+                    <small>${escapeHTML(axis.right)}</small>
+                </div>
+            </article>`;
+    }).join("");
+}
+
+function buildPoliticalStanceSummary() {
+    const { freedom, order, progress, populism } = gameState.stats;
+    const items = [
+        ["公共發聲", freedom >= 60 ? "願意擴大發聲空間" : freedom <= 40 ? "傾向限制衝突擴散" : "保留彈性"],
+        ["治理秩序", order >= 60 ? "重視可控與穩定" : order <= 40 ? "願意承受失序壓力" : "維持中線"],
+        ["改革速度", progress >= 60 ? "偏向制度改革" : progress <= 40 ? "偏向延後或保守處理" : "漸進調整"],
+        ["群眾動員", populism >= 60 ? "常借用聲量施壓" : populism <= 40 ? "偏好降溫與查證" : "視局勢使用"]
+    ];
+
+    return `
+        <div class="stance-grid">
+            ${items.map(([label, read]) => `
+                <article>
+                    <span>${escapeHTML(label)}</span>
+                    <b>${escapeHTML(read)}</b>
+                </article>
+            `).join("")}
+        </div>`;
+}
+
+function buildPoliticalReflectionSummary() {
+    if (!gameState.reflectionLog.length) return "";
+    return `
+        <div class="political-reflection-list">
+            <b>你的選擇反覆呈現的政治代價</b>
+            ${gameState.reflectionLog.slice(-3).map((item) => `
+                <article>
+                    <span>${escapeHTML(compactText(item.eventTitle, 22))}</span>
+                    <small>讓 ${escapeHTML(item.beneficiary)}；也讓 ${escapeHTML(item.payer)}。</small>
+                </article>
+            `).join("")}
+        </div>`;
+}
+
 function buildPersonalityAnalysis() {
     const history = gameState.choiceHistory;
     if (!history.length) {
         return `
             <section class="personality-report">
-                <h3>玩家個性特質解析</h3>
-                <p>這次沒有足夠的選擇紀錄可以分析。下一輪只要完成幾個關鍵抉擇，結局就會依照你的行為軌跡生成側寫。</p>
+                <h3>政治光譜與立場整理</h3>
+                <p>這次沒有足夠的選擇紀錄可以分析。下一輪完成幾個關鍵抉擇後，結局會整理你的政治位置與決策代價。</p>
             </section>`;
     }
 
-    const traits = topBehaviorTraits(3);
-    const archetype = personalityArchetype(traits);
-    const blindSpot = traits.map((trait) => trait.blind).filter(Boolean).slice(0, 2).join(" ");
-    const strongest = traits[0];
+    const archetype = politicalArchetype();
 
     return `
         <section class="personality-report">
-            <h3>玩家個性特質解析</h3>
-            <div class="trait-badges">
-                ${traits.map((trait) => `<span class="trait-badge">${escapeHTML(trait.label)}</span>`).join("")}
-            </div>
+            <h3>政治光譜與立場整理</h3>
             <div class="analysis-card primary">
                 <b>${escapeHTML(archetype)}</b>
-                <span>${escapeHTML(strongest.read)}</span>
+                <span>這不是人格診斷，而是你在這局遊戲中用選擇留下的政治位置。</span>
             </div>
-            <div class="analysis-card">
-                <b>心理與行為解讀</b>
-                <span>${escapeHTML(buildBehaviorConceptLine(traits, history.length))}</span>
+            ${buildPoliticalStanceSummary()}
+            <div class="spectrum-panel">
+                ${buildPoliticalAxisRows()}
             </div>
-            <div class="analysis-card">
-                <b>可能盲點</b>
-                <span>${escapeHTML(blindSpot)} 這是遊戲內行為側寫，不是臨床診斷。</span>
-            </div>
+            ${buildPoliticalReflectionSummary()}
             ${buildChoiceTimeline()}
         </section>`;
 }

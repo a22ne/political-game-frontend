@@ -388,6 +388,11 @@ button:active {
     text-align: left;
 }
 
+#event-modal .modal-content,
+#news-flash .modal-content {
+    max-width: min(880px, 94vw);
+}
+
 .modal-content p,
 .modal-content span,
 .modal-content em,
@@ -400,6 +405,23 @@ button:active {
     flex-direction: column;
     gap: 10px;
     margin-top: 20px;
+}
+
+#event-modal .options {
+    background: rgba(244, 247, 247, 0.9);
+    border-top: 1px solid rgba(56, 111, 143, 0.16);
+    bottom: 0;
+    margin: 14px -2px 0;
+    padding-top: 12px;
+    position: sticky;
+    z-index: 2;
+}
+
+@media (min-width: 760px) {
+    #event-modal .options {
+        display: grid;
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
 }
 
 .option-btn {
@@ -714,6 +736,39 @@ body.dark-mode {
     font-weight: 800;
 }
 
+.scene-dossier {
+    display: grid;
+    gap: 8px;
+    margin: 10px 0;
+}
+
+.scene-dossier article {
+    background: rgba(255,255,255,0.62);
+    border: 1px solid rgba(56, 111, 143, 0.16);
+    border-left: 4px solid var(--primary);
+    border-radius: 8px;
+    display: grid;
+    gap: 3px;
+    padding: 9px 10px;
+}
+
+.scene-dossier span,
+.scene-dossier b {
+    display: block;
+}
+
+.scene-dossier span {
+    color: var(--primary);
+    font-size: 0.78rem;
+    font-weight: 900;
+}
+
+.scene-dossier b {
+    color: #314150;
+    font-size: 0.94rem;
+    line-height: 1.42;
+}
+
 .next-hook {
     animation: beat-flash 520ms ease both;
     background: rgba(183, 121, 55, 0.16);
@@ -836,6 +891,68 @@ body.dark-mode {
 .why-panel small {
     color: #516270;
     font-weight: 700;
+}
+
+.stakeholder-council {
+    background: rgba(255,255,255,0.56);
+    border: 1px solid rgba(56, 111, 143, 0.16);
+    border-radius: 10px;
+    display: grid;
+    gap: 8px;
+    margin: 10px 0;
+    padding: 10px;
+}
+
+.council-title {
+    color: var(--primary);
+    font-size: 0.86rem;
+    font-weight: 900;
+}
+
+.stakeholder-council article {
+    align-items: center;
+    animation: speaker-pop 240ms ease both;
+    background: rgba(255,255,255,0.62);
+    border-radius: 8px;
+    display: grid;
+    gap: 9px;
+    grid-template-columns: auto 1fr;
+    padding: 8px;
+}
+
+.stakeholder-council article:nth-child(3) {
+    animation-delay: 60ms;
+}
+
+.stakeholder-council article:nth-child(4) {
+    animation-delay: 120ms;
+}
+
+.council-avatar {
+    animation: avatar-idle 2.8s ease-in-out infinite;
+    background: #eef3f4;
+    border: 2px solid #fff;
+    border-radius: 999px;
+    box-shadow: 0 4px 12px rgba(0,0,0,0.14);
+    height: 42px;
+    object-fit: cover;
+    width: 42px;
+}
+
+.stakeholder-council b,
+.stakeholder-council span {
+    display: block;
+}
+
+.stakeholder-council b {
+    color: #263746;
+}
+
+.stakeholder-council span {
+    color: #4a5965;
+    font-size: 0.9rem;
+    font-weight: 700;
+    line-height: 1.35;
 }
 
 .character-arc-board {
@@ -1282,6 +1399,49 @@ body.dark-mode {
     line-height: 1.4;
 }
 
+.reflection-panel {
+    background: rgba(255,255,255,0.72);
+    border: 1px solid rgba(183, 121, 55, 0.22);
+    border-left: 4px solid var(--alert);
+    border-radius: 8px;
+    display: grid;
+    gap: 8px;
+    margin: 10px 0;
+    padding: 10px;
+}
+
+.reflection-panel > b {
+    color: #7a4d1f;
+}
+
+.reflection-panel article {
+    background: rgba(255,255,255,0.58);
+    border-radius: 8px;
+    display: grid;
+    gap: 3px;
+    padding: 8px 10px;
+}
+
+.reflection-panel article.question {
+    background: rgba(183, 121, 55, 0.11);
+}
+
+.reflection-panel span,
+.reflection-panel strong {
+    display: block;
+}
+
+.reflection-panel span {
+    color: #7a4d1f;
+    font-size: 0.78rem;
+    font-weight: 900;
+}
+
+.reflection-panel strong {
+    color: #314150;
+    line-height: 1.4;
+}
+
 .dialogue-pair {
     display: grid;
     gap: 8px;
@@ -1605,6 +1765,151 @@ body.dark-mode {
 
 .analysis-card b {
     color: #263746;
+}
+
+.stance-grid {
+    display: grid;
+    gap: 8px;
+}
+
+@media (min-width: 720px) {
+    .stance-grid {
+        grid-template-columns: repeat(2, minmax(0, 1fr));
+    }
+}
+
+.stance-grid article {
+    background: rgba(255,255,255,0.62);
+    border-left: 4px solid var(--primary);
+    border-radius: 8px;
+    display: grid;
+    gap: 3px;
+    padding: 9px 10px;
+}
+
+.stance-grid span,
+.stance-grid b {
+    display: block;
+}
+
+.stance-grid span {
+    color: var(--primary);
+    font-size: 0.78rem;
+    font-weight: 900;
+}
+
+.stance-grid b {
+    color: #314150;
+}
+
+.spectrum-panel {
+    background: rgba(255,255,255,0.58);
+    border: 1px solid rgba(56, 111, 143, 0.16);
+    border-radius: 10px;
+    display: grid;
+    gap: 10px;
+    padding: 10px;
+}
+
+.spectrum-row {
+    display: grid;
+    gap: 7px;
+}
+
+.spectrum-head {
+    display: grid;
+    gap: 2px;
+}
+
+.spectrum-head b,
+.spectrum-head span {
+    display: block;
+}
+
+.spectrum-head b {
+    color: #263746;
+}
+
+.spectrum-head span {
+    color: #4a5965;
+    font-size: 0.88rem;
+    font-weight: 700;
+    line-height: 1.35;
+}
+
+.spectrum-track {
+    align-items: center;
+    display: grid;
+    gap: 8px;
+    grid-template-columns: minmax(70px, auto) 1fr minmax(70px, auto);
+}
+
+.spectrum-track small {
+    color: #5a6873;
+    font-size: 0.76rem;
+    font-weight: 900;
+}
+
+.spectrum-track small:last-child {
+    text-align: right;
+}
+
+.spectrum-bar {
+    background: linear-gradient(90deg, rgba(63,122,95,0.78), rgba(255,255,255,0.8), rgba(183,80,80,0.72));
+    border: 1px solid rgba(56, 111, 143, 0.16);
+    border-radius: 999px;
+    height: 14px;
+    position: relative;
+}
+
+.spectrum-bar i {
+    background: #263746;
+    border: 2px solid #fff;
+    border-radius: 999px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.22);
+    height: 22px;
+    position: absolute;
+    top: 50%;
+    transform: translate(-50%, -50%);
+    width: 22px;
+}
+
+.political-reflection-list {
+    background: rgba(183, 121, 55, 0.1);
+    border-left: 4px solid var(--alert);
+    border-radius: 8px;
+    display: grid;
+    gap: 8px;
+    padding: 10px;
+}
+
+.political-reflection-list > b {
+    color: #7a4d1f;
+}
+
+.political-reflection-list article {
+    background: rgba(255,255,255,0.62);
+    border-radius: 8px;
+    display: grid;
+    gap: 3px;
+    padding: 8px 10px;
+}
+
+.political-reflection-list span,
+.political-reflection-list small {
+    display: block;
+}
+
+.political-reflection-list span {
+    color: #7a4d1f;
+    font-size: 0.78rem;
+    font-weight: 900;
+}
+
+.political-reflection-list small {
+    color: #314150;
+    font-weight: 700;
+    line-height: 1.4;
 }
 
 .choice-timeline {
