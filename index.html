@@ -88,7 +88,7 @@
         <div id="intro-modal" class="modal hidden">
             <div class="modal-content glass-panel">
                 <h2 id="intro-title">世界觀介紹</h2>
-                <p id="intro-desc" style="line-height: 1.6; margin-bottom: 20px;">內容載入中...</p>
+                <div id="intro-desc" style="line-height: 1.6; margin-bottom: 20px;">內容載入中...</div>
                 <div class="options">
                     <button id="intro-next-btn" class="primary-btn">繼續</button>
                 </div>
@@ -103,7 +103,7 @@
                     <button id="close-event-modal" class="close-btn">&times;</button>
                 </div>
                 <img id="event-image" src="" alt="事件插圖" style="width: 100%; border-radius: 8px; margin-bottom: 15px; display: none; object-fit: cover; max-height: 200px;">
-                <p id="event-desc">事件描述內容...</p>
+                <div id="event-desc" class="event-desc">事件描述內容...</div>
                 <div class="options">
                     <button id="btn-opt-a" class="option-btn">選項 A</button>
                     <button id="btn-opt-b" class="option-btn">選項 B</button>
@@ -138,7 +138,7 @@
                     <h2 style="color: var(--danger); margin: 0;">📰 新聞快訊</h2>
                     <button id="close-news-modal" class="close-btn">&times;</button>
                 </div>
-                <p id="news-text" style="font-size: 1.2rem; font-weight: bold; margin: 20px 0;"></p>
+                <div id="news-text" style="font-size: 1.05rem; margin: 20px 0;"></div>
                 
                 <div id="news-explanation" style="background: rgba(255,255,255,0.7); padding: 15px; border-radius: 8px; margin-bottom: 20px; text-align: left; font-size: 0.95rem; line-height: 1.5; color: #333; display: none;">
                 </div>
@@ -155,7 +155,7 @@
         <div id="end-screen" class="modal hidden">
             <div class="modal-content glass-panel">
                 <h2>遊戲結束</h2>
-                <p id="end-text"></p>
+                <div id="end-text"></div>
                 <button onclick="location.reload()" class="primary-btn">重新遊玩</button>
             </div>
         </div>
