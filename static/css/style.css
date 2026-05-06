@@ -32,6 +32,12 @@ body {
     overflow: hidden; /* 遊戲主畫面不允許捲動 */
 }
 
+*,
+*::before,
+*::after {
+    box-sizing: border-box;
+}
+
 /* 玻璃擬物化組件 */
 .glass-panel {
     background: var(--glass-bg);
@@ -70,6 +76,8 @@ body {
     justify-content: center;
     align-items: center;
     background: radial-gradient(circle at center, transparent, rgba(0,0,0,0.05));
+    overflow-y: auto;
+    padding: 48px 16px;
 }
 
 #start-screen .glass-panel {
@@ -184,6 +192,11 @@ button:active {
     left: 20px;
     top: 100px;
     width: 250px;
+    max-height: calc(100dvh - 120px);
+    overflow-y: auto;
+    overflow-x: hidden;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
     z-index: 20;
 }
 
@@ -319,17 +332,19 @@ button:active {
 
 /* 模態視窗 (事件、新聞、結局) */
 .modal {
-    position: absolute;
-    top: 0;
-    left: 0;
-    width: 100vw;
-    height: 100vh;
+    position: fixed;
+    inset: 0;
+    width: auto;
+    height: auto;
     background: rgba(0,0,0,0.4);
     display: flex;
     justify-content: center;
-    align-items: center;
+    align-items: flex-start;
     z-index: 100;
     opacity: 1;
+    overflow-y: auto;
+    overscroll-behavior: contain;
+    padding: clamp(16px, 4vh, 36px) 16px;
     transition: opacity 0.3s;
 }
 
@@ -341,7 +356,20 @@ button:active {
 .modal-content {
     width: 90%;
     max-width: 500px;
+    max-height: calc(100dvh - clamp(32px, 8vh, 72px));
+    margin: auto 0;
+    overflow-x: hidden;
+    overflow-y: auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-gutter: stable;
     text-align: left;
+}
+
+.modal-content p,
+.modal-content span,
+.modal-content em,
+.option-btn {
+    overflow-wrap: anywhere;
 }
 
 .options {
@@ -470,6 +498,10 @@ body.dark-mode {
     box-shadow: inset 0 0 0 1px rgba(255,255,255,0.7);
     object-fit: contain !important;
     padding: 10px;
+}
+
+#news-text {
+    line-height: 1.65;
 }
 
 .agency-explanation {

@@ -1,8 +1,106 @@
 // 遊戲核心數值與狀態
 const API_BASE = window.API_BASE_URL || "";
 const apiFetch = (path, options) => fetch(`${API_BASE}${path}`, options);
-const ASSET_BASE = window.ASSET_BASE_URL || "";
-const assetPath = (path) => `${ASSET_BASE}${path}`;
+const ASSET_BASE = window.ASSET_BASE_URL || "./";
+const REMOTE_ASSET_BASE = window.REMOTE_ASSET_BASE_URL || API_BASE;
+
+function normalizeBaseUrl(base) {
+    if (!base) return "";
+    return base.endsWith("/") ? base : `${base}/`;
+}
+
+function normalizeImageName(fileName, fallback = "") {
+    const raw = String(fileName || fallback || "").trim();
+    if (!raw) return "";
+    if (/^(?:https?:|data:|blob:)/i.test(raw)) return raw;
+    return raw
+        .replace(/\\/g, "/")
+        .replace(/^\.?\//, "")
+        .replace(/^static\/images\//i, "")
+        .replace(/^images\//i, "");
+}
+
+function imagePath(fileName, fallback = "char_generic.png", base = ASSET_BASE) {
+    const normalized = normalizeImageName(fileName, fallback);
+    if (!normalized) return "";
+    if (/^(?:https?:|data:|blob:)/i.test(normalized)) return normalized;
+    return `${normalizeBaseUrl(base)}static/images/${normalized}`;
+}
+
+const assetPath = (path) => {
+    const normalized = normalizeImageName(path);
+    return normalized ? imagePath(normalized, "") : "";
+};
+
+function remoteImagePath(fileName) {
+    if (!REMOTE_ASSET_BASE || /^(?:https?:|data:|blob:)/i.test(String(fileName || ""))) return "";
+    const normalized = normalizeImageName(fileName);
+    return normalized ? imagePath(normalized, "", REMOTE_ASSET_BASE) : "";
+}
+
+function setImageSource(img, fileName, fallbackFile = "char_generic.png", fallbackDataUri = "") {
+    if (!img) return;
+    const localSrc = imagePath(fileName, fallbackFile);
+    const remoteSrc = remoteImagePath(fileName);
+    const finalFallback = fallbackDataUri || imagePath(fallbackFile, fallbackFile);
+
+    img.onerror = () => {
+        if (remoteSrc && img.src !== remoteSrc) {
+            img.src = remoteSrc;
+            return;
+        }
+        img.onerror = null;
+        if (finalFallback) {
+            img.src = finalFallback;
+        } else {
+            img.style.display = "none";
+        }
+    };
+
+    if (localSrc) {
+        img.src = localSrc;
+    } else if (finalFallback) {
+        img.src = finalFallback;
+    }
+}
+
+function isStudentPlayer() {
+    const character = gameState.character || {};
+    return [character.name, character.role, character.description]
+        .filter(Boolean)
+        .some((value) => String(value).includes("學生"));
+}
+
+function polishNarrativeText(text = "") {
+    return String(text || "")
+        .replace(/受協份子/g, "妥協派")
+        .replace(
+            /遊行最終和平落幕，但政府並未給出實質承諾，工資法案不了了之。/g,
+            "遊行和平落幕，但政府只承諾持續研議；工資法案暫時擱置，沒有進入具體承諾階段。"
+        )
+        .replace(/工資法案不了了之/g, "工資法案暫時擱置，沒有進入具體承諾階段")
+        .replace(/不了了之/g, "暫時擱置");
+}
+
+function adaptPersuasionConfig(config) {
+    if (!config) return config;
+
+    const adapted = {
+        ...config,
+        persuasion_high: { ...(config.persuasion_high || {}) },
+        persuasion_low: { ...(config.persuasion_low || {}) }
+    };
+
+    if (isStudentPlayer() && adapted.target === "莫長老") {
+        adapted.reason = "莫長老不是要「抵制一個學生」，而是擔心你的街頭倡議把社區帶進世代衝突。他正要求社區場地與長輩組織暫停支援這場行動。";
+        adapted.persuasion_high.text = "透過師長與家長代表溝通，把訴求轉成正式程序（高說服力）";
+        adapted.persuasion_low.text = "直接開直播點名批評長老守舊（低說服力）";
+        adapted.persuasion_high.result_text = "你把衝突從「學生對抗長輩」改成「如何讓訴求進入正式程序」。莫長老仍保留立場，但同意先讓代表旁聽協調，反彈暫時降溫。";
+        adapted.persuasion_low.result_text = "公開點名讓支持者覺得痛快，也讓保守社群更防衛。議題焦點從具體改革滑向世代對立，後續溝通成本升高。";
+    }
+
+    return adapted;
+}
 
 const gameState = {
     playerName: '',
@@ -155,7 +253,7 @@ function renderMapPins() {
     // 渲染人物前，先確保不清除掉已經加入的 hotspots
     // 所以改用 createElement 方式加入
     gameState.characters.forEach(c => {
-        let imgSrc = c.image_filename ? assetPath(`static/images/${c.image_filename}`) : assetPath('static/images/char_generic.png');
+        let imgSrc = imagePath(c.image_filename, 'char_generic.png');
         
         const pin = document.createElement('div');
         pin.className = 'map-pin';
@@ -165,22 +263,27 @@ function renderMapPins() {
             <img src="${imgSrc}" alt="${c.name}">
             <div class="pin-label">${c.name}</div>
         `;
+        setImageSource(pin.querySelector('img'), c.image_filename, 'char_generic.png');
         
         pin.addEventListener('click', (e) => {
             e.stopPropagation();
-            showDetailModal(c.name, c.description, imgSrc, c.relationships_text, c.stances_text);
+            showDetailModal(c.name, c.description, imgSrc, c.relationships_text, c.stances_text, c.image_filename);
         });
         
         els.worldMap.appendChild(pin);
     });
 }
 
-function showDetailModal(title, desc, imgSrc, relationships, stances) {
+function showDetailModal(title, desc, imgSrc, relationships, stances, imageFileName = "") {
     els.detailTitle.innerText = title;
     els.detailDesc.innerText = desc;
     
-    if (imgSrc) {
-        els.detailImage.src = imgSrc;
+    if (imgSrc || imageFileName) {
+        if (imageFileName) {
+            setImageSource(els.detailImage, imageFileName, 'char_generic.png');
+        } else {
+            els.detailImage.src = imgSrc;
+        }
         els.detailImage.style.display = 'block';
     } else {
         els.detailImage.style.display = 'none';
@@ -200,8 +303,8 @@ function showDetailModal(title, desc, imgSrc, relationships, stances) {
 function renderNetwork() {
     els.networkGrid.innerHTML = '';
     gameState.characters.forEach(c => {
-        let imgSrc = c.image_filename ? assetPath(`static/images/${c.image_filename}`) : '';
-        let imgHtml = imgSrc ? `<img src="${imgSrc}" alt="${c.name}" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">` : '';
+        let imgSrc = c.image_filename ? imagePath(c.image_filename, '') : '';
+        let imgHtml = imgSrc ? `<img src="${imgSrc}" data-image-file="${c.image_filename}" alt="${c.name}" style="width: 60px; height: 60px; border-radius: 50%; object-fit: cover; margin-bottom: 10px;">` : '';
         els.networkGrid.innerHTML += `
             <div class="char-card" style="text-align: center;">
                 ${imgHtml}
@@ -210,6 +313,9 @@ function renderNetwork() {
                 <p style="text-align: left;">${c.description}</p>
             </div>
         `;
+    });
+    els.networkGrid.querySelectorAll('img[data-image-file]').forEach((img) => {
+        setImageSource(img, img.dataset.imageFile, 'char_generic.png');
     });
 }
 
@@ -416,39 +522,6 @@ function showIndexExplanation(type) {
 
 // 背景色動態改變已移除，維持穩定色調
 
-function showEvent() {
-    els.triggerEventBtn.classList.add('hidden');
-    if (gameState.currentEventIndex >= gameState.events.length) {
-        return endGame();
-    }
-    
-    const ev = gameState.events[gameState.currentEventIndex];
-    els.eventTitle.innerText = ev.title;
-    if (ev.image_filename) {
-        els.eventImage.src = assetPath(`static/images/${ev.image_filename}`);
-        els.eventImage.style.display = 'block';
-    } else {
-        els.eventImage.style.display = 'none';
-    }
-    els.eventDesc.innerText = ev.description;
-    
-    if (ev.is_news) {
-        // 新聞事件，只有一個按鈕
-        els.btnOptA.innerText = "了解";
-        els.btnOptB.style.display = 'none';
-        els.eventTitle.innerText = "📰 新聞快訊：" + ev.title;
-        els.eventTitle.style.color = "#f44336";
-    } else {
-        els.btnOptA.innerText = ev.options[0].text;
-        els.btnOptB.style.display = 'inline-block';
-        els.btnOptB.innerText = ev.options[1].text;
-        els.eventTitle.style.color = "var(--text-main)";
-    }
-    
-    els.eventModal.classList.remove('hidden');
-    updateProgressBar();
-}
-
 function handleDecision(optIndex) {
     const ev = gameState.events[gameState.currentEventIndex];
     let option = ev.options[0]; // 預設拿第一個
@@ -458,8 +531,9 @@ function handleDecision(optIndex) {
     
     // 檢查是否有說服設定且觸發條件符合
     if (ev.persuasion_config && ev.persuasion_config.if_option === optIndex) {
-        gameState.pendingDecision = { option, optIndex, ev };
-        showPersuasionModal(ev.persuasion_config);
+        const persuasionConfig = adaptPersuasionConfig(ev.persuasion_config);
+        gameState.pendingDecision = { option, optIndex, ev, persuasionConfig };
+        showPersuasionModal(persuasionConfig);
         return;
     }
     
@@ -471,7 +545,7 @@ function showPersuasionModal(config) {
     
     let targetChar = gameState.characters.find(c => c.name === config.target);
     if (targetChar && targetChar.image_filename) {
-        els.persuasionTargetImg.src = assetPath(`static/images/${targetChar.image_filename}`);
+        setImageSource(els.persuasionTargetImg, targetChar.image_filename, 'char_generic.png');
     }
     els.persuasionTargetName.innerText = config.target;
     els.persuasionReason.innerText = config.reason;
@@ -486,91 +560,10 @@ function showPersuasionModal(config) {
 }
 
 function handlePersuasion(isHigh) {
-    const config = gameState.pendingDecision.ev.persuasion_config;
+    const config = gameState.pendingDecision.persuasionConfig || gameState.pendingDecision.ev.persuasion_config;
     const pOption = isHigh ? config.persuasion_high : config.persuasion_low;
     els.persuasionModal.classList.add('hidden');
     applyDecisionAndShowNews(gameState.pendingDecision.option, gameState.pendingDecision.ev, pOption, config.target, isHigh);
-}
-
-function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh = false) {
-    const effects = option.effects || {freedom:0, order:0, progress:0, populism:0};
-    
-    // 合併說服結果的效果
-    if (pOption && pOption.effects) {
-        effects.freedom = (effects.freedom || 0) + (pOption.effects.freedom || 0);
-        effects.order = (effects.order || 0) + (pOption.effects.order || 0);
-        effects.progress = (effects.progress || 0) + (pOption.effects.progress || 0);
-        effects.populism = (effects.populism || 0) + (pOption.effects.populism || 0);
-    }
-    
-    // 應用大環境效果
-    gameState.stats.freedom += effects.freedom;
-    gameState.stats.order += effects.order;
-    gameState.stats.progress += effects.progress;
-    gameState.stats.populism += effects.populism;
-    
-    let statChangesHtml = "";
-    // 處理個人屬性
-    if (option.personal_effects && gameState.character.personal_stats) {
-        if (!ev.target_role || ev.target_role === gameState.character.role || ev.target_role === gameState.character.name) {
-            for (let key in option.personal_effects) {
-                applyPersonalStatChange(key, option.personal_effects[key]);
-            }
-        }
-    }
-    // 處理說服的個人代價
-    if (pOption && pOption.cost && gameState.character.personal_stats) {
-        for (let key in pOption.cost) {
-            applyPersonalStatChange(key, pOption.cost[key]);
-        }
-    }
-
-    function applyPersonalStatChange(key, change) {
-        if (gameState.character.personal_stats[key] !== undefined) {
-            gameState.character.personal_stats[key] += change;
-            let color = change > 0 ? 'green' : 'red';
-            let sign = change > 0 ? '+' : '';
-            statChangesHtml += `<span style="color: ${color}; background: rgba(255,255,255,0.8); padding: 5px 10px; border-radius: 5px;">${key} ${sign}${change}</span>`;
-        }
-    }
-    
-    // 動態更新 NPC 好感度
-    updateNPCApprovalsBasedOnEffects(effects, pTarget, isPHigh);
-    
-    updateStatsUI();
-    renderNPCApprovals();
-    
-    // 隱藏事件，顯示新聞快訊
-    els.eventModal.classList.add('hidden');
-    
-    let newsHTML = "";
-    if (ev.is_news) {
-        newsHTML = `<strong>${ev.title}</strong><br><br>${ev.options[0].result_text}`;
-        if (ev.relationship_effects_text) {
-            newsHTML += `<br><br><em style="color: #555;">影響：${ev.relationship_effects_text}</em>`;
-        }
-    } else {
-        newsHTML = `<strong>${gameState.playerName} 選擇了：${option.text}</strong><br><br>${option.result_text}`;
-        if (pOption) {
-            newsHTML += `<br><br><strong style="color: #f44336;">【說服結果】</strong> ${pOption.result_text}`;
-        }
-        
-        if (option.explanation) {
-            newsHTML += `<hr style="border: 0; border-top: 1px dashed #ccc; margin: 15px 0;">
-            <div style="background: rgba(74, 144, 226, 0.1); padding: 12px; border-radius: 8px; border-left: 4px solid var(--primary); margin-top: 10px;">
-                <h4 style="margin: 0 0 5px 0; color: var(--primary);">🔍 決策解析</h4>
-                <span style="font-size: 0.95rem; color: #333; line-height: 1.5;">${option.explanation}</span>
-            </div>`;
-        }
-    }
-    
-    els.newsText.innerHTML = newsHTML;
-    
-    if (els.newsStatChanges) {
-        els.newsStatChanges.innerHTML = statChangesHtml;
-    }
-    
-    els.newsFlash.classList.remove('hidden');
 }
 
 function updateNPCApprovalsBasedOnEffects(effects, pTarget, isPHigh) {
@@ -698,6 +691,18 @@ function eventIllustrationDataUri(seedName = "") {
     return `data:image/svg+xml;charset=UTF-8,${encodeURIComponent(svg)}`;
 }
 
+function hashText(text) {
+    return String(text || "").split("").reduce((sum, char) => sum + char.charCodeAt(0), 0);
+}
+
+function conceptCard(title, body) {
+    return `
+        <div class="agency-explanation">
+            <h4>${title}</h4>
+            <span>${body}</span>
+        </div>`;
+}
+
 function buildAgencyExplanation(option, ev, effects) {
     const movement = [];
     if ((effects.freedom || 0) > 0) movement.push("擴大可發聲的人");
@@ -710,13 +715,70 @@ function buildAgencyExplanation(option, ev, effects) {
     if ((effects.populism || 0) < 0) movement.push("讓情緒動員降溫");
 
     const direction = movement.length ? movement.join("、") : "改變大家衡量問題的標準";
-    return `
-        <div class="agency-explanation">
-            <h4>為什麼個人能撼動整個議題走向</h4>
-            <span>
-                你的選擇不是單一事件的結尾，而是替社會提供一個新的理解框架。當一個人公開表態、整理證據、承擔風險或連結不同群體時，媒體會有新的敘事，旁觀者會重新判斷成本，決策者也會感受到支持或反彈的方向。這次行動特別影響的是：${direction}。因此，個人的行動會透過輿論、組織、人際網絡與制度程序一路擴散，最後改變 ${ev.title} 這個議題的公共走向。
-            </span>
-        </div>`;
+    const context = polishNarrativeText(`${ev.title} ${option.text} ${option.result_text} ${option.explanation}`);
+
+    if (/暫時擱置|未給出實質承諾|沒有進入具體承諾/.test(context)) {
+        return conceptCard(
+            "政策窗口為什麼會關上",
+            `和平落幕不等於政策成功。若沒有承諾、時程、預算或負責單位，議題會從街頭退回等待狀態；這次選擇比較像把衝突暫時收束，留下日後再動員的理由，而不是立刻推動法案前進。`
+        );
+    }
+
+    const candidates = [];
+    if ((effects.progress || 0) > 0) {
+        candidates.push({
+            title: "制度化：把訴求變成程序",
+            body: `公共議題能不能留下來，關鍵常常不是聲量，而是能否被翻成條文、會議、預算、時程或責任分工。這次選擇的重點是${direction}，讓訴求比較有機會進入可追蹤的制度流程。`
+        });
+        candidates.push({
+            title: "政策企業家",
+            body: `有些行動者的作用是把問題、方案和政治時機接在一起。你這次不是單純表態，而是在幫議題找到可被採納的說法與入口；因此影響集中在${direction}。`
+        });
+    }
+    if ((effects.freedom || 0) > 0) {
+        candidates.push({
+            title: "框架設定",
+            body: `誰能命名問題，誰就能影響大家怎麼判斷責任與成本。這次行動把焦點從單純對抗移到「這件事應該如何被理解」，所以效果落在${direction}。`
+        });
+    }
+    if ((effects.order || 0) > 0) {
+        candidates.push({
+            title: "政治機會結構",
+            body: `當制度願意開門、社會願意暫停對抗，行動才比較容易被接住。這次選擇的作用不是讓所有人服氣，而是創造一個較不混亂的入口，讓${direction}變得可能。`
+        });
+    }
+    if ((effects.populism || 0) > 0 || (effects.order || 0) < 0) {
+        candidates.push({
+            title: "反彈效應",
+            body: `改革碰到身份認同、既有利益或長期不信任時，反對者會把議題改寫成威脅。這次選擇雖然製造聲量，也提高了對立成本，特別表現在${direction}。`
+        });
+    }
+    if ((effects.populism || 0) < 0) {
+        candidates.push({
+            title: "情緒降溫不等於問題消失",
+            body: `讓場面冷靜下來能減少誤判，但真正的矛盾仍需要後續處理。這次選擇的價值在於先降低衝突熱度，讓${direction}，避免議題被口號完全接管。`
+        });
+    }
+    if ((effects.freedom || 0) < 0) {
+        candidates.push({
+            title: "沉默螺旋",
+            body: `當表態成本變高，不代表大家改變想法，而是更多人選擇不說。這次選擇可能讓場面看起來安靜，實際上卻把分歧壓到檯面下，造成${direction}。`
+        });
+    }
+    if ((effects.progress || 0) < 0) {
+        candidates.push({
+            title: "路徑依賴",
+            body: `一旦議題被放回舊流程，後續就容易照既有慣性前進。這次選擇讓改革速度放慢，並不表示事情結束，而是讓下一次推進需要更高的組織成本。`
+        });
+    }
+
+    candidates.push({
+        title: "議程設定",
+        body: `公共注意力有限，議題要被處理，必須先被看見、被排序、被賦予急迫性。這次選擇影響的是${direction}，也會改變媒體、民代和旁觀者接下來願意追問什麼。`
+    });
+
+    const picked = candidates[hashText(`${ev.title}${option.text}${gameState.currentEventIndex}`) % candidates.length];
+    return conceptCard(picked.title, picked.body);
 }
 
 function showEvent() {
@@ -727,9 +789,14 @@ function showEvent() {
 
     const ev = gameState.events[gameState.currentEventIndex];
     els.eventTitle.innerText = ev.title;
-    els.eventImage.src = eventIllustrationDataUri(ev.image_filename || ev.title);
+    setImageSource(
+        els.eventImage,
+        ev.image_filename,
+        "",
+        eventIllustrationDataUri(ev.image_filename || ev.title)
+    );
     els.eventImage.style.display = 'block';
-    els.eventImage.alt = `${ev.title} 的一致線稿插圖`;
+    els.eventImage.alt = `${ev.title} 的事件插圖`;
     els.eventDesc.innerText = ev.description;
 
     if (ev.is_news) {
@@ -749,7 +816,7 @@ function showEvent() {
 }
 
 function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh = false) {
-    const effects = option.effects || {freedom:0, order:0, progress:0, populism:0};
+    const effects = { freedom: 0, order: 0, progress: 0, populism: 0, ...(option.effects || {}) };
 
     if (pOption && pOption.effects) {
         effects.freedom = (effects.freedom || 0) + (pOption.effects.freedom || 0);
@@ -794,21 +861,21 @@ function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh =
 
     let newsHTML = "";
     if (ev.is_news) {
-        newsHTML = `<strong>${ev.title}</strong><br><br>${ev.options[0].result_text}`;
+        newsHTML = `<strong>${ev.title}</strong><br><br>${polishNarrativeText(ev.options[0].result_text)}`;
         if (ev.relationship_effects_text) {
-            newsHTML += `<br><br><em style="color: #555;">影響：${ev.relationship_effects_text}</em>`;
+            newsHTML += `<br><br><em style="color: #555;">影響：${polishNarrativeText(ev.relationship_effects_text)}</em>`;
         }
     } else {
-        newsHTML = `<strong>${gameState.playerName} 選擇了：${option.text}</strong><br><br>${option.result_text}`;
+        newsHTML = `<strong>${gameState.playerName} 選擇了：${polishNarrativeText(option.text)}</strong><br><br>${polishNarrativeText(option.result_text)}`;
         if (pOption) {
-            newsHTML += `<br><br><strong style="color: var(--danger);">說服結果</strong> ${pOption.result_text}`;
+            newsHTML += `<br><br><strong style="color: var(--danger);">說服結果</strong> ${polishNarrativeText(pOption.result_text)}`;
         }
 
         if (option.explanation) {
             newsHTML += `<hr style="border: 0; border-top: 1px dashed #ccc; margin: 15px 0;">
             <div style="background: rgba(56, 111, 143, 0.08); padding: 12px; border-radius: 8px; border-left: 4px solid var(--primary); margin-top: 10px;">
                 <h4 style="margin: 0 0 5px 0; color: var(--primary);">決策解析</h4>
-                <span style="font-size: 0.95rem; color: #333; line-height: 1.5;">${option.explanation}</span>
+                <span style="font-size: 0.95rem; color: #333; line-height: 1.5;">${polishNarrativeText(option.explanation)}</span>
             </div>`;
         }
         newsHTML += buildAgencyExplanation(option, ev, effects);
