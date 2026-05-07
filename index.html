@@ -3,7 +3,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>萬能的鑰匙</title>
     <link href="https://fonts.googleapis.com/css2?family=Noto+Sans+TC:wght@400;700;900&display=swap" rel="stylesheet">
-    <link rel="stylesheet" href="./static/css/style.css">
+    <link rel="stylesheet" href="./static/css/style.css?v=20260507-director7">
 </head>
 <body>
     <!-- 頂部進度條 -->
@@ -18,7 +18,7 @@
             <p style="text-align: left; line-height: 1.8; margin-bottom: 20px; font-size: 1.1rem;">
                 在民主的社會中，每個人手上都有一把、甚至很多把萬能的鑰匙。<br><br>
                 這可能是你手中的選票、可能是網路上的言論發表、或者是人與人之間的社會互動。我們可以透過手中的鑰匙，開啟新世界的大門。<br><br>
-                但請記住，民主不是一成不變的，它可能會向前邁進，也可能會倒退回黑暗的深淵——這一切，完全取決於我們如何使用手上的鑰匙。
+                這一切，完全取決於我們用手上的鑰匙打開世界的哪一道門。
             </p>
             <div class="input-group">
                 <input type="text" id="player-name" placeholder="請輸入你的名字..." autocomplete="off">
@@ -156,7 +156,7 @@
             <div class="modal-content glass-panel">
                 <h2>遊戲結束</h2>
                 <div id="end-text"></div>
-                <button onclick="location.reload()" class="primary-btn">重新遊玩</button>
+                <button id="restart-btn" class="primary-btn">重新遊玩</button>
             </div>
         </div>
     </div>
@@ -198,6 +198,6 @@
         window.API_BASE_URL = "https://political-game-backend.onrender.com";
         window.ASSET_BASE_URL = window.ASSET_BASE_URL || "./";
     </script>
-    <script src="./static/js/game.js"></script>
+    <script src="./static/js/game.js?v=20260507-director7"></script>
 </body>
 </html>

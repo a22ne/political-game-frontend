@@ -224,6 +224,7 @@ const gameState = {
     decisionLocked: false,
     persuasionLocked: false,
     appliedDecisionKeys: {},
+    npcContinuity: {},
     choiceHistory: [],
     reflectionLog: [],
     behaviorScores: {
@@ -368,7 +369,7 @@ function renderWorldIntro() {
         ["威權退場後", "蓬萊共和國重新有了選舉、議會與媒體，但人民對制度的信任還沒有長回來。"],
         ["街頭與議會", "街頭能讓痛苦被看見，議會能把訴求寫成規則；兩者彼此需要，也彼此懷疑。"],
         ["媒體與網路", "每個事件都會被剪輯、轉傳與重新命名。真相不是消失，而是常常被情緒蓋住。"],
-        ["舊利益與新世代", "改革不是一句口號。它會改變誰付錢、誰失去權力、誰第一次被聽見。"]
+        ["舊利益與新世代", "改革不是一句口號。它會改變誰付錢、誰失去權力、誰第一次被聽見。這一切，完全取決於我們用手上的鑰匙打開世界的哪一道門。"]
     ];
 
     return `
@@ -590,6 +591,7 @@ function behaviorScoreTemplate() {
 function resetBehaviorTracking() {
     gameState.choiceHistory = [];
     gameState.reflectionLog = [];
+    gameState.npcContinuity = {};
     gameState.behaviorScores = behaviorScoreTemplate();
 }
 
@@ -614,6 +616,721 @@ function smoothStoryEvents(events = []) {
         .map((event, index) => ({ event, index, weight: eventArcWeight(event, index) }))
         .sort((a, b) => a.weight - b.weight)
         .map(({ event }) => event);
+}
+
+function directorChapterBeat(index = 0, total = 1) {
+    const ratio = (index + 1) / Math.max(total, 1);
+    if (ratio <= 0.25) {
+        return {
+            label: "立場形成",
+            trigger: "選前倒數開始，市府想維持平穩，民間卻覺得自己再不說話就會被忽略。",
+            pressure: "每個角色都在判斷你是能合作的人，還是只會讓局勢升溫的人。"
+        };
+    }
+    if (ratio <= 0.55) {
+        return {
+            label: "議題升溫",
+            trigger: "前幾回合留下的承諾開始被拿出來檢查，支持者要求你更明確，反對者也開始結盟。",
+            pressure: "你不能再只表態，必須說清楚誰要付成本、誰要被保護。"
+        };
+    }
+    if (ratio <= 0.8) {
+        return {
+            label: "反彈成形",
+            trigger: "原本觀望的人開始被迫站隊，媒體與社群把每個選擇剪成簡短標籤。",
+            pressure: "你前面得罪或拉近的人，現在會用自己的方式回到場上。"
+        };
+    }
+    return {
+        label: "最後收束",
+        trigger: "選前最後一週，所有陣營都想把結果寫成自己的勝利。",
+        pressure: "這一刻考驗的不是一次選擇，而是你前面留下的信任、衝突與承諾。"
+    };
+}
+
+function directorLensTitle(lensLabel = "信任危機") {
+    return {
+        "責任危機": "事故責任時間線",
+        "生計壓力": "生活成本談判",
+        "世代衝突": "街頭與社區的邊界",
+        "資訊戰": "假消息與查證戰",
+        "發展代價": "發展成本誰承擔",
+        "安全焦慮": "安全授權與自由界線",
+        "價值衝突": "婚姻平權與家庭價值",
+        "信任危機": "制度信任破口"
+    }[lensLabel] || "制度信任破口";
+}
+
+function playerRoleKey() {
+    const character = gameState.character || {};
+    const text = `${character.name || ""}${character.role || ""}${character.description || ""}`;
+    if (text.includes("學生")) return "student";
+    if (text.includes("企業") || text.includes("商")) return "business";
+    if (text.includes("公務") || text.includes("政府")) return "civil";
+    return "citizen";
+}
+
+function directorLensForPlayer(baseLens = {}, event = {}) {
+    const role = playerRoleKey();
+    const label = baseLens.label || "信任危機";
+    if (role === "business") {
+        const table = {
+            "世代衝突": {
+                cause: "年輕員工要求透明升遷與合理工時，老員工和地方商家擔心規則改太快，成本會直接壓到店裡。",
+                stakes: "推太快，企業可能撐不住；拖太久，年輕員工會覺得又被敷衍。",
+                actors: ["龐頭目", "威廉總裁", "莫長老", "莉亞記者"]
+            },
+            "生計壓力": {
+                cause: "薪資、租金和訂單同時擠壓，中小企業與員工都覺得自己在替制度失靈付錢。",
+                stakes: "只顧員工，店可能倒；只顧店，員工會把壓力帶上街頭。",
+                actors: ["龐頭目", "威廉總裁", "柯爾市長", "莉亞記者"]
+            },
+            "責任危機": {
+                cause: "事故或失誤發生後，市府、企業和現場管理者都被要求說明誰早就知道風險。",
+                stakes: "查清楚會得罪人；不查清楚，企業與市府的信任會一起下滑。",
+                actors: ["柯爾市長", "莉亞記者", "威廉總裁", "費教授"]
+            }
+        };
+        if (table[label]) return { ...baseLens, ...table[label] };
+    }
+
+    if (role === "civil") {
+        const table = {
+            "世代衝突": {
+                cause: "學生和年輕公民要求更快回應，長官與社區要求第一線先穩住場面。",
+                stakes: "你太快推動會得罪長官；太慢回應會讓民眾覺得公務體系只會拖。",
+                actors: ["柯爾市長", "艾達議員", "莫長老", "莉亞記者"]
+            },
+            "責任危機": {
+                cause: "事故發生後，第一線資料、上級指示和公開說法彼此對不上。",
+                stakes: "說太少會變成遮掩；說太多可能被上級切割。",
+                actors: ["柯爾市長", "莉亞記者", "雷將軍", "費教授"]
+            },
+            "生計壓力": {
+                cause: "民眾要求補助與調薪，上級卻要求你用有限預算交出結果。",
+                stakes: "承諾太多會爆預算；承諾太少會讓民怨回到第一線窗口。",
+                actors: ["柯爾市長", "龐頭目", "艾達議員", "費教授"]
+            }
+        };
+        if (table[label]) return { ...baseLens, ...table[label] };
+    }
+
+    if (role === "student" && label === "生計壓力") {
+        return {
+            ...baseLens,
+            cause: "工讀、學費與租屋壓力讓學生抗爭不只是價值表態，而是生活已經撐不下去。",
+            stakes: "只喊理想會被說不懂現實；只談現實又可能失去改革方向。",
+            actors: ["艾達議員", "龐頭目", "莉亞記者", "莫長老"]
+        };
+    }
+
+    return baseLens;
+}
+
+function directorPlayerPosition(event = {}) {
+    const role = playerRoleKey();
+    const lens = issueLens(event);
+    const lines = {
+        student: {
+            "世代衝突": "你是被推到台前的學生倡議者。這回合的核心不是打倒長輩，而是讓訴求進入可回應的程序。",
+            "生計壓力": "你要把學生的生活壓力說清楚，避免運動只被看成情緒表演。",
+            default: "你靠動員和敘事讓問題被看見，但也必須承擔失控後果。"
+        },
+        business: {
+            "世代衝突": "你是中小企業主。這回合的核心不是反對年輕人，而是說清楚改變成本誰先扛。",
+            "生計壓力": "你同時面對員工、訂單和現金流。你必須讓大家知道，生存壓力不是拒絕改革的藉口。",
+            default: "你不是財團，也不是旁觀者。每一次表態都會影響員工、商會與街頭對你的判斷。"
+        },
+        civil: {
+            "責任危機": "你站在第一線。這回合的核心是把責任說清楚，同時不讓上級把你變成代罪者。",
+            "資訊戰": "你掌握部分資料，但公開與保密都會有代價。你的難題是讓制度說人話。",
+            default: "你知道流程怎麼運作，也知道流程常被拿來拖延。玩家的位置就在這個矛盾裡。"
+        },
+        citizen: {
+            default: "你不是掌控全局的人，但你的表態會被各方拿來判斷下一步該靠近還是反制。"
+        }
+    };
+    const group = lines[role] || lines.citizen;
+    return group[lens.label] || group.default;
+}
+
+function directorDemandForEvent(event = {}, lensOverride = null) {
+    const lens = lensOverride || issueLens(event);
+    const role = playerRoleKey();
+    const roleSpecific = {
+        business: {
+            "世代衝突": {
+                issue: "年輕員工要求透明升遷與合理排班",
+                demand: "員工代表要求公開升遷標準、限制臨時加班，並在一個月內公布改善時程。",
+                opposition: "老員工與店家擔心規則改太快，會增加人事成本，也破壞原本的工作默契。",
+                question: "你要不要承諾具體改革時程，同時說清楚成本怎麼分攤？"
+            },
+            "生計壓力": {
+                issue: "薪資與店家生存壓力同時爆發",
+                demand: "員工要求調薪與更穩定工時；中小店家要求市府補助、稅費緩衝或租金協調。",
+                opposition: "商會擔心一次加太多會讓小店倒閉，工會則擔心又被要求等待。",
+                question: "你要先承認員工訴求，還是先保住企業現金流？"
+            }
+        },
+        student: {
+            "世代衝突": {
+                issue: "學生要求校方與市府正式回應改革",
+                demand: "學生團體要求公開協調會、改革時程，以及學生代表進入決策流程。",
+                opposition: "社區與長輩擔心抗爭失控，讓日常生活被政治衝突佔據。",
+                question: "你要把街頭壓力推進制度，還是先修補社區信任？"
+            },
+            "生計壓力": {
+                issue: "學費、租屋與工讀壓力成為抗爭核心",
+                demand: "學生要求提高補助、改善工讀保障，並公開學校與市府的資源分配。",
+                opposition: "校方和市府擔心財源不足，反對沒有預算來源的承諾。",
+                question: "你要把生活壓力變成制度訴求，還是先降低外界反彈？"
+            }
+        },
+        civil: {
+            "責任危機": {
+                issue: "事故責任與通報時間線需要公開",
+                demand: "民眾要求市府公布通報紀錄、責任窗口與後續修補時程。",
+                opposition: "上級擔心資料公開後引爆究責，要求第一線先統一說法。",
+                question: "你要先公開可查證資料，還是先保住行政程序？"
+            },
+            "資訊戰": {
+                issue: "假消息擴散，官方說法失去可信度",
+                demand: "媒體與公民團體要求公開資料來源、查證流程和更正機制。",
+                opposition: "安全單位要求先限制擴散，避免謠言造成更大傷害。",
+                question: "你要先公開查證資料，還是先控管未證實消息？"
+            }
+        }
+    };
+
+    const common = {
+        "責任危機": {
+            issue: "事故或失誤後，責任鏈必須被說清楚",
+            demand: "受影響者要求公開時間線、通報紀錄、責任窗口與補救時程。",
+            opposition: "市府與相關單位擔心被直接定罪，要求先調查再公開定論。",
+            question: "你要先追責公開，還是先穩住處理流程？"
+        },
+        "生計壓力": {
+            issue: "生活成本上升，基層要求看得見的保障",
+            demand: "工會與受薪者要求調薪、補助或基本收入方案，並要求政府提出時程。",
+            opposition: "企業與財政單位擔心成本失控，要求分階段處理。",
+            question: "你要先回應生活壓力，還是先確認財源與成本？"
+        },
+        "世代衝突": {
+            issue: "年輕世代要求進入決策，不再只被安撫",
+            demand: "青年團體要求代表席次、公開協調會與具體改革時程。",
+            opposition: "社區與既有組織擔心改變太快，讓日常秩序被衝突打亂。",
+            question: "你要加快改革，還是先取得社區信任？"
+        },
+        "資訊戰": {
+            issue: "假消息與片面剪輯正在改寫公共判斷",
+            demand: "媒體與公民團體要求公開資料、查證流程與平台責任。",
+            opposition: "安全派擔心資訊傷害已經擴散，主張先限制再查證。",
+            question: "你要先保護言論自由，還是先阻止明確傷害？"
+        },
+        "發展代價": {
+            issue: "開發帶來工作，也把污染與風險留給居民",
+            demand: "居民與環團要求環境審查、補償方案與公開監測資料。",
+            opposition: "企業與就業支持者擔心開發停下來，工作和投資會一起流失。",
+            question: "你要先保護居民與環境，還是先保住工作與投資？"
+        },
+        "安全焦慮": {
+            issue: "安全威脅升高，政府要求更大權限",
+            demand: "安全單位要求擴大授權、快速處置與資訊控管。",
+            opposition: "公民團體擔心權力擴張後缺乏監督，會壓縮自由。",
+            question: "你要先給政府更多安全權限，還是先建立監督邊界？"
+        },
+        "價值衝突": {
+            issue: "婚姻平權與家庭價值發生正面衝突",
+            demand: "平權團體要求市府表態支持婚姻平權、公布公聽會與法案時程，並保障伴侶權利。",
+            opposition: "傳統家庭與宗教團體要求保留家庭教育與信仰發言空間，反對被貼上歧視標籤。",
+            question: "你要不要支持平權訴求進入正式法案，同時回應傳統社群的擔憂？"
+        },
+        "信任危機": {
+            issue: "民眾不相信制度會真的回應",
+            demand: "公民團體要求公開資料、具體時程與可追蹤的責任窗口。",
+            opposition: "市府擔心承諾太快會被追責，反對在資訊不足時定案。",
+            question: "你要用透明換信任，還是先保留行政彈性？"
+        }
+    };
+
+    return roleSpecific[role]?.[lens.label] || common[lens.label] || common["信任危機"];
+}
+
+function directorTopicVariant(lens = {}, event = {}, occurrence = 0) {
+    const variants = {
+        "生計壓力": [
+            {
+                title: "薪資與工時談判",
+                demand: {
+                    issue: "薪資與工時壓力需要被正面處理",
+                    demand: "受薪者要求調薪、穩定排班與公開談判時程。",
+                    opposition: "雇主與財政單位擔心成本一次升高，讓小店、預算或服務承受不了。",
+                    question: "你要先承認生活壓力，還是先說清楚成本來源？"
+                }
+            },
+            {
+                title: "租金與補助缺口",
+                lens: {
+                    cause: "房租、物價與通勤成本一起上升，補助制度卻跟不上實際生活。",
+                    stakes: "補助太慢會讓民怨升高；補助太快又會被要求說清楚財源。"
+                },
+                demand: {
+                    issue: "租金與補助缺口讓生活壓力外溢",
+                    demand: "租屋族與基層家庭要求租金協調、交通補貼與明確申請流程。",
+                    opposition: "財政單位與房東團體擔心補助變成長期負擔，要求先設限。",
+                    question: "你要把資源先給最痛的人，還是先設計可持續的門檻？"
+                }
+            },
+            {
+                title: "基本保障財源爭議",
+                lens: {
+                    cause: "基本收入或社會保障被提出來，但誰付錢、誰受益還沒有說清楚。",
+                    stakes: "保障可以降低恐懼，也可能引發財源與公平爭議。"
+                },
+                demand: {
+                    issue: "基本保障方案需要財源與對象",
+                    demand: "改革派要求建立最低保障，先照顧最脆弱的人。",
+                    opposition: "企業與財政派要求先說明稅源、排富條件與長期成本。",
+                    question: "你要先承諾保障方向，還是先要求完整財源設計？"
+                }
+            }
+        ],
+        "責任危機": [
+            {
+                title: "事故責任時間線",
+                demand: {
+                    issue: "事故責任時間線必須公開",
+                    demand: "受影響者要求通報紀錄、責任窗口、補償方式與修補時程。",
+                    opposition: "市府與相關單位擔心未調查完就被定罪，要求先穩住現場。",
+                    question: "你要先公開追責，還是先保住處理流程？"
+                }
+            },
+            {
+                title: "補償與究責分工",
+                lens: {
+                    cause: "初步事故已被看見，但補償、究責與制度修補仍沒有人願意完整承擔。",
+                    stakes: "只給補償會被說買沉默；只談究責又可能讓修補拖慢。"
+                },
+                demand: {
+                    issue: "補償、究責與制度修補要分工",
+                    demand: "受害者要求立即補償，媒體要求責任鏈，改革派要求修法。",
+                    opposition: "相關單位擔心責任被無限擴大，要求分階段處理。",
+                    question: "你要先安置受害者，還是先咬住責任鏈？"
+                }
+            }
+        ],
+        "價值衝突": [
+            {
+                title: "婚姻平權與家庭價值",
+                demand: {
+                    issue: "婚姻平權與家庭價值發生正面衝突",
+                    demand: "平權團體要求市府表態支持婚姻平權、公布公聽會與法案時程，並保障伴侶權利。",
+                    opposition: "傳統家庭與宗教團體要求保留家庭教育與信仰發言空間，反對被貼上歧視標籤。",
+                    question: "你要不要支持平權訴求進入正式法案，同時回應傳統社群的擔憂？"
+                }
+            },
+            {
+                title: "家庭教育與公共權利",
+                lens: {
+                    cause: "平權訴求進入公共議程後，爭議轉向學校教育、家庭價值與政府是否該表態。",
+                    stakes: "只談權利會讓傳統社群覺得被否定；只談傳統會讓少數者繼續沒有保障。"
+                },
+                demand: {
+                    issue: "家庭教育與公共權利需要被同時安排",
+                    demand: "平權團體要求把伴侶權利、校園反歧視與公共服務保障寫清楚。",
+                    opposition: "家長與宗教團體要求保留教材討論空間，不要把疑慮直接等同歧視。",
+                    question: "你要用制度保障少數權利，還是先安排更長的社會溝通？"
+                }
+            }
+        ],
+        "資訊戰": [
+            {
+                title: "假消息與查證戰"
+            },
+            {
+                title: "平台責任與言論界線",
+                lens: {
+                    cause: "假消息事件後，焦點轉向平台、媒體與政府該如何界定有害內容。",
+                    stakes: "平台不管會傷害公共判斷；政府管太多又會被視為審查。"
+                },
+                demand: {
+                    issue: "平台責任與言論界線需要被訂出來",
+                    demand: "媒體與公民團體要求公開演算法、標記查證來源與更正流程。",
+                    opposition: "自由派與平台方擔心政府過度介入，讓批評聲音也被下架。",
+                    question: "你要先要求平台負責，還是先限制政府介入範圍？"
+                }
+            }
+        ],
+        "發展代價": [
+            {
+                title: "環境審查與居民補償"
+            },
+            {
+                title: "能源轉型與就業風險",
+                lens: {
+                    cause: "污染爭議尚未解決，能源轉型又把就業、電價與產業競爭拉進同一張桌子。",
+                    stakes: "轉型太慢會留下污染；轉型太快會讓勞工與地方產業付出代價。"
+                },
+                demand: {
+                    issue: "能源轉型需要同時安排就業與補償",
+                    demand: "環團要求減排時程，勞工要求轉職保障，居民要求公開監測。",
+                    opposition: "企業與地方政府擔心電價、工作與投資同時受衝擊。",
+                    question: "你要先推轉型時程，還是先處理地方與就業成本？"
+                }
+            }
+        ],
+        "安全焦慮": [
+            {
+                title: "安全授權與自由界線"
+            },
+            {
+                title: "國安管制與監督機制",
+                lens: {
+                    cause: "安全威脅被放大後，社會開始追問授權、監督與錯判的代價。",
+                    stakes: "授權不足會被說放任風險；授權過大會讓異議失去空間。"
+                },
+                demand: {
+                    issue: "國安管制需要監督機制",
+                    demand: "安全單位要求快速處置權，公民團體要求司法或議會監督。",
+                    opposition: "安全派認為監督會拖慢反應，自由派則擔心權力失控。",
+                    question: "你要先給安全單位權限，還是先設下可檢驗的邊界？"
+                }
+            }
+        ],
+        "信任危機": [
+            {
+                title: "制度信任破口"
+            },
+            {
+                title: "公開承諾與追蹤機制",
+                lens: {
+                    cause: "前面承諾越來越多，民眾開始要求不是再開會，而是要看得到誰負責。",
+                    stakes: "沒有追蹤機制，承諾會變成空話；追蹤太硬，決策者會更防衛。"
+                },
+                demand: {
+                    issue: "公開承諾需要追蹤機制",
+                    demand: "公民團體要求承諾清單、責任人、期限與公開進度表。",
+                    opposition: "市府與協調者擔心期限過死，讓談判失去彈性。",
+                    question: "你要把承諾釘死，還是保留談判彈性？"
+                }
+            }
+        ]
+    };
+
+    const list = variants[lens.label] || [{ title: directorLensTitle(lens.label) }];
+    const variant = list[occurrence % list.length];
+    return {
+        title: variant.title || directorLensTitle(lens.label),
+        lens: variant.lens ? { ...lens, ...variant.lens } : lens,
+        demand: variant.demand || null
+    };
+}
+
+function renderIssueDemand(event = {}) {
+    const demand = event.director_demand_data || directorDemandForEvent(event);
+    return `
+        <section class="issue-demand">
+            <span>主要議題訴求</span>
+            <h3>${escapeHTML(demand.issue)}</h3>
+            <div class="issue-demand-grid">
+                <article>
+                    <small>提出方要求</small>
+                    <b>${escapeHTML(demand.demand)}</b>
+                </article>
+                <article>
+                    <small>反對方擔心</small>
+                    <b>${escapeHTML(demand.opposition)}</b>
+                </article>
+            </div>
+        </section>`;
+}
+
+function newsOriginalHeadline(event = {}) {
+    const raw = polishNarrativeText(event.original_title || event.title || "");
+    if (!raw || raw.startsWith("新聞：")) return event.director_topic_title || "新聞事件";
+    return raw.replace(/^新聞[:：]\s*/, "");
+}
+
+function newsOriginalBody(event = {}, demand = null) {
+    const raw = polishNarrativeText(event.original_description || "");
+    if (raw && raw !== polishNarrativeText(event.description || "")) return raw;
+    if (raw && !raw.includes("選前倒數開始")) return raw;
+    const info = demand || event.director_demand_data || directorDemandForEvent(event);
+    return `${info.issue}出現新進展。提出方要求「${info.demand}」；反對方則擔心「${info.opposition}」。`;
+}
+
+function newsConcreteBody(event = {}, demand = null, named = "") {
+    const lens = issueLens(event);
+    const info = demand || event.director_demand_data || directorDemandForEvent(event, lens);
+    const headline = newsOriginalHeadline(event).replace(/。$/, "");
+    const actor = named || involvedCharactersForEvent(event)
+        .filter((name) => name !== gameState.character?.name)
+        .slice(0, 2)
+        .join("、") || "相關單位";
+    const raw = polishNarrativeText(event.original_description || "");
+    const rawIsConcrete = raw
+        && raw !== polishNarrativeText(event.description || "")
+        && !raw.includes("選前倒數開始")
+        && !raw.includes("前幾回合留下")
+        && raw.length >= 14
+        && raw.length <= 140;
+
+    if (rawIsConcrete) {
+        return raw.includes(headline) ? raw : `${headline}。${raw}`;
+    }
+
+    const templates = {
+        "責任危機": `快訊指出，${headline}。通報時間、現場處置與責任窗口對不上，${actor}被要求說清楚誰在什麼時間做了哪些決定。`,
+        "生計壓力": `快訊指出，${headline}。租金、物價或薪資壓力被帶到市府前，受影響者要求把帳單、補助和談判時程攤開。`,
+        "世代衝突": `快訊指出，${headline}。青年團體把訴求帶進公共場域，長輩、學校和社區則擔心日常秩序被抗爭打亂。`,
+        "資訊戰": `快訊指出，${headline}。匿名帳號、媒體片段與未查證消息同時擴散，社會還沒確認事實就開始站隊。`,
+        "發展代價": `快訊指出，${headline}。開發、污染或能源方案的資料被公開後，居民要求監測與補償，企業要求不要讓投資停擺。`,
+        "安全焦慮": `快訊指出，${headline}。安全單位要求擴大授權，公民團體則要求先說清楚監督邊界與誤判代價。`,
+        "價值衝突": `快訊指出，${headline}。平權團體與傳統社群在公聽會外正面交鋒，爭點從價值表態推進到制度保障。`,
+        "信任危機": `快訊指出，${headline}。前面的承諾開始被檢查，民眾要求責任人、期限和公開進度，不再接受只說會處理。`
+    };
+
+    return templates[lens.label] || `${headline}。${info.issue}成為新的公共爭議，提出方要求「${info.demand}」，反對方擔心「${info.opposition}」。`;
+}
+
+function renderNewsContent(event = {}) {
+    if (!event.is_news) return "";
+    const lens = issueLens(event);
+    const demand = event.director_demand_data || directorDemandForEvent(event, lens);
+    const named = involvedCharactersForEvent(event)
+        .filter((name) => name !== gameState.character?.name)
+        .slice(0, 3)
+        .join("、");
+    return `
+        <section class="news-content">
+            <span>新聞內容</span>
+            <h3>${escapeHTML(newsOriginalHeadline(event))}</h3>
+            <div class="news-content-grid">
+                <article>
+                    <small>發生什麼</small>
+                    <b>${escapeHTML(newsConcreteBody(event, demand, named))}</b>
+                </article>
+                <article>
+                    <small>被點名的人</small>
+                    <b>${escapeHTML(named ? `${named}必須回應「${demand.issue}」。` : `各方必須回應「${demand.issue}」。`)}</b>
+                </article>
+                <article>
+                    <small>接下來的壓力</small>
+                    <b>${escapeHTML(demand.question)}</b>
+                </article>
+            </div>
+        </section>`;
+}
+
+function directorSceneDescription(event = {}, index = 0, total = 1, lensOverride = null) {
+    const lens = lensOverride || issueLens(event);
+    const lensEvent = { ...event, director_lens_data: lens };
+    const beat = directorChapterBeat(index, total);
+    const actors = involvedCharactersForEvent(lensEvent).slice(0, 4);
+    const actorLines = actors.map((name) => {
+        const position = npcIssuePosition(name, event);
+        return `${name}主張「${position.label}」`;
+    }).join("；");
+    return `${beat.trigger} ${lens.cause} ${actorLines}。你被推到場中央，必須決定這件事要走向公開追問、制度處理、秩序控管，還是群眾動員。${beat.pressure}`;
+}
+
+function directorChoiceVerb(effects = {}, order = 0) {
+    const [key, value] = strongestEffect(effects);
+    const table = {
+        freedom: value >= 0
+            ? ["公開資料，讓受影響的人先說話", "把現場聲音帶進媒體與會議"]
+            : ["先收斂發言，避免衝突繼續擴大", "要求各方暫停公開指控"],
+        order: value >= 0
+            ? ["先劃清現場邊界，要求各方降溫", "把安全與流程放在第一步"]
+            : ["保留街頭壓力，逼決策者正面回應", "讓現場繼續施壓，不急著收場"],
+        progress: value >= 0
+            ? ["要求建立正式時程與責任名單", "把訴求送進可追蹤的程序"]
+            : ["暫緩改革，先避免新的承諾失控", "先守住現有流程，不立刻推制度改動"],
+        populism: value >= 0
+            ? ["把矛盾推到台前，逼所有人表態", "用高聲量讓議題不能被壓下去"]
+            : ["先降低情緒，讓查證和談判回到前面", "拆掉口號，要求各方說清楚證據"],
+        balance: ["保留談判空間，不讓任何一方直接出局", "先把各方帶回同一張桌子"]
+    };
+    const options = table[key] || table.balance;
+    return options[order % options.length];
+}
+
+function normalizeChoiceText(text = "") {
+    return polishNarrativeText(text).replace(/[，。！？\s]/g, "");
+}
+
+function directorGenericChoiceText(effects = {}, order = 0) {
+    const [key, value] = strongestEffect(effects);
+    const lines = {
+        freedom: value >= 0
+            ? ["公開關鍵資料，讓受影響的人先把事實說清楚。", "開放一場公開聽證，讓支持與反對方都留下紀錄。"]
+            : ["先收斂公開發言，要求各方把指控送交查證。", "暫停未證實指控，避免衝突在社群失控。"],
+        order: value >= 0
+            ? ["先劃清現場邊界，讓協調能在安全條件下開始。", "請各方撤回最激烈行動，換取正式會議時程。"]
+            : ["保留街頭壓力，逼決策者不能再拖延。", "讓現場繼續施壓，直到責任窗口被公開點名。"],
+        progress: value >= 0
+            ? ["要求建立正式時程、責任窗口和公開追蹤表。", "把訴求拆成三項可審議方案，送進議會或協調會。"]
+            : ["暫緩改革承諾，先補齊資料、財源與責任分工。", "先守住現有流程，要求下一回合再提出完整方案。"],
+        populism: value >= 0
+            ? ["把矛盾推到台前，迫使沉默的權力者公開回應。", "用短影音與街頭行動放大訴求，讓議題不能被壓下去。"]
+            : ["先降低情緒，讓查證和談判回到前面。", "拆掉口號，要求各方用證據說清楚立場。"],
+        balance: ["保留談判空間，不讓任何一方直接出局。", "先把各方帶回同一張桌子，交換可接受底線。"]
+    }[key] || ["保留談判空間，不讓任何一方直接出局。", "先把各方帶回同一張桌子，交換可接受底線。"];
+    return lines[order % lines.length];
+}
+
+function ensureDistinctChoiceTexts(options = [], event = {}, lens = null) {
+    const seen = new Set();
+    return options.map((option, index) => {
+        if (!option || event.is_news) return option;
+        let text = polishNarrativeText(option.text || "");
+        let normalized = normalizeChoiceText(text);
+        if (!normalized || seen.has(normalized)) {
+            const alternatives = [
+                directorGenericChoiceText(option.effects || {}, index + 1),
+                directorChoiceVerb(option.effects || {}, index + 1),
+                directorGenericChoiceText(option.effects || {}, index + 2),
+                directorChoiceVerb(option.effects || {}, index + 2),
+                `${directorGenericChoiceText(option.effects || {}, index + 3)}（把責任寫清楚）`,
+                `${directorGenericChoiceText(option.effects || {}, index + 4)}（先處理代價）`
+            ];
+            text = alternatives.find((candidate) => !seen.has(normalizeChoiceText(candidate))) || `${text}（改以不同節奏處理）`;
+            normalized = normalizeChoiceText(text);
+        }
+        seen.add(normalized);
+        return { ...option, text };
+    });
+}
+
+function directorChoiceText(option = {}, event = {}, order = 0, lensOverride = null) {
+    const lens = lensOverride || issueLens(event);
+    const role = playerRoleKey();
+    const [key, value] = strongestEffect(option.effects || {});
+    const roleLines = {
+        business: {
+            "世代衝突": [
+                "提出分階段改善工時與升遷規則，先公開成本與時程。",
+                "先守住店內現有流程，召開員工會議重新談可負擔的改變。"
+            ],
+            "生計壓力": [
+                "公開帳目壓力，和員工代表一起向市府要求補助方案。",
+                "先穩住現金流，承諾一週內提出可執行的薪資調整。"
+            ]
+        },
+        student: {
+            "世代衝突": [
+                "把抗議訴求整理成正式時程，要求校方和市府公開回應。",
+                "先拜訪社區代表，讓長輩知道學生不是來摧毀日常生活。"
+            ],
+            "生計壓力": [
+                "公開學生生活壓力資料，要求補助和工讀制度進入議程。",
+                "先和工會及議員協調，避免運動被說成只會喊口號。"
+            ]
+        },
+        civil: {
+            "責任危機": [
+                "整理時間線和文件，要求上級指定可追蹤的責任窗口。",
+                "先穩住對外說法，再把內部缺口送進正式程序。"
+            ],
+            "資訊戰": [
+                "公開可查證資料，讓謠言失去空間。",
+                "先限制未查證消息擴散，同時承諾補上公開說明。"
+            ]
+        }
+    };
+
+    const picked = roleLines[role]?.[lens.label]?.[order];
+    if (picked) return picked;
+
+    return directorGenericChoiceText(option.effects || {}, order);
+}
+
+function directorResultText(option = {}, event = {}, order = 0, lensOverride = null) {
+    const effects = option.effects || {};
+    const [key, value] = strongestEffect(effects);
+    const lens = lensOverride || issueLens(event);
+    const actors = involvedCharactersForEvent({ ...event, director_lens_data: lens });
+    const first = actors[order % Math.max(actors.length, 1)] || "場上角色";
+    const second = actors[(order + 1) % Math.max(actors.length, 1)] || "另一方";
+    const movement = {
+        freedom: value >= 0 ? "更多人敢公開說話" : "公開討論先被壓低",
+        order: value >= 0 ? "現場暫時穩住" : "街頭壓力繼續升高",
+        progress: value >= 0 ? "議題進入正式流程" : "改革暫時回到舊路徑",
+        populism: value >= 0 ? "聲量快速擴散" : "情緒暫時降溫",
+        balance: "各方重新估算彼此底線"
+    }[key] || "各方重新估算彼此底線";
+    const cost = {
+        freedom: value >= 0 ? "怕失控的人會更緊張" : "等著被聽見的人會失望",
+        order: value >= 0 ? "街頭會懷疑你退讓" : "一般民眾和第一線承擔混亂",
+        progress: value >= 0 ? "既有利益者開始反制" : "改革支持者失去耐心",
+        populism: value >= 0 ? "複雜問題被剪成敵我" : "需要聲量的人可能被看不見",
+        balance: "沒有人真正滿意"
+    }[key] || "沒有人真正滿意";
+    return `${movement}。${first}看到可利用的空間，${second}則開始計算自己的損失。代價是：${cost}。`;
+}
+
+function directorNewsResult(event = {}, index = 0, total = 1, lensOverride = null) {
+    const lens = lensOverride || issueLens(event);
+    const beat = directorChapterBeat(index, total);
+    return `${beat.label}被外部新聞推了一把。${lens.stakes} 場上角色不會再把這件事當成背景消息，而會拿它來要求你下一步表態。`;
+}
+
+function applyStoryDirector(events = []) {
+    const total = Math.max(events.length, 1);
+    const lensCounts = {};
+    return events.map((event, index) => {
+        const baseLens = issueLens(event);
+        const roleLens = directorLensForPlayer(baseLens, event);
+        const occurrence = lensCounts[roleLens.label] || 0;
+        lensCounts[roleLens.label] = occurrence + 1;
+        const topic = directorTopicVariant(roleLens, event, occurrence);
+        const lens = topic.lens;
+        const beat = directorChapterBeat(index, total);
+        const demand = topic.demand || directorDemandForEvent(event, lens);
+        const directed = {
+            ...event,
+            original_title: event.original_title || event.title,
+            original_description: event.original_description || event.description,
+            director_lens_data: lens,
+            director_demand_data: demand,
+            director_topic_title: topic.title,
+            title: event.is_news
+                ? `新聞：${compactText(newsOriginalHeadline(event), 22).replace(/。$/, "")}`
+                : `${beat.label}：${topic.title}`,
+            description: directorSceneDescription(event, index, total, lens),
+            relationship_effects_text: event.relationship_effects_text || `${lens.label}讓${lens.actors.slice(0, 3).join("、")}重新計算和你的距離。`
+        };
+
+        directed.options = (event.options || []).map((option, optionIndex) => ({
+            ...option,
+            original_text: option.original_text || option.text,
+            original_result_text: option.original_result_text || option.result_text,
+            text: event.is_news ? "把這則新聞納入下一步判斷" : directorChoiceText(option, event, optionIndex, lens),
+            result_text: event.is_news ? directorNewsResult(event, index, total, lens) : directorResultText(option, event, optionIndex, lens)
+        }));
+        directed.options = ensureDistinctChoiceTexts(directed.options, directed, lens);
+
+        if (directed.persuasion_config) {
+            const target = directed.persuasion_config.target;
+            const profile = npcInterestProfile(target);
+            directed.persuasion_config = {
+                ...directed.persuasion_config,
+                reason: `${target}認為你的做法會傷到「${profile.interest}」。他不是隨機反對，而是在保護自己的底線。`,
+                persuasion_high: {
+                    ...directed.persuasion_config.persuasion_high,
+                    text: `私下承認${target}的顧慮，換取他暫時留在談判桌上`,
+                    result_text: `${target}沒有改變立場，但願意讓衝突先回到可談的範圍。`
+                },
+                persuasion_low: {
+                    ...directed.persuasion_config.persuasion_low,
+                    text: `公開要求${target}表態，讓支持者看見你的強硬`,
+                    result_text: `${target}覺得自己被推到台前，開始把反對你變成自己的主線。`
+                }
+            };
+        }
+
+        return directed;
+    });
 }
 
 function currentArcBeat() {
@@ -839,59 +1556,68 @@ function ensureCharacterArc(name = "") {
 }
 
 function issueLens(event = {}) {
+    if (event.director_lens_data) return event.director_lens_data;
     const text = `${event.title || ""} ${event.description || ""} ${event.image_filename || ""}`.toLowerCase();
+    if (/accident|車禍|事故|工安|傷亡|災害/.test(text)) {
+        return {
+            label: "責任危機",
+            cause: "事故發生後，市府、現場單位和相關利益方都被要求說明責任。",
+            stakes: "查清楚會得罪人；草草收場會讓信任更低。",
+            actors: ["柯爾市長", "莉亞記者", "艾達議員", "費教授"]
+        };
+    }
     if (/wage|ubi|工資|基本收入|社會福利/.test(text)) {
         return {
             label: "生計壓力",
-            cause: "物價與薪資落差累積太久，基層開始要求把補償寫進制度。",
-            stakes: "企業成本、政府財政與街頭支持會同時被拉扯。",
+            cause: "薪水追不上生活，基層要求政府和企業給答案。",
+            stakes: "加快改革會增加成本；拖太久會讓街頭更不滿。",
             actors: ["龐頭目", "艾達議員", "威廉總裁", "柯爾市長"]
         };
     }
     if (/education|學生|教育|校園/.test(text)) {
         return {
             label: "世代衝突",
-            cause: "年輕人的訴求碰到社區與學校的舊規則，雙方都怕自己被忽視。",
-            stakes: "訴求能不能從街頭進入正式程序，會決定後面誰願意支援。",
+            cause: "年輕人想改變，長輩和學校怕生活被打亂。",
+            stakes: "你要讓訴求被聽見，也不能讓社區覺得被攻擊。",
             actors: ["艾達議員", "莫長老", "莉亞記者", "費教授"]
         };
     }
     if (/fakenews|media|scandal|bribe|網路|言論|假消息|媒體|醜聞|賄賂/.test(text)) {
         return {
             label: "資訊戰",
-            cause: "選舉接近，各方都想先定義真相；假消息與言論管制因此被綁在一起。",
-            stakes: "查證、自由與安全會互相衝突，任何表態都可能被剪成另一種敘事。",
+            cause: "網路先把消息傳開，大家還沒查證就開始站隊。",
+            stakes: "管太多會傷害自由；不處理又會讓謠言擴散。",
             actors: ["莉亞記者", "蘇網紅", "雷將軍", "費教授"]
         };
     }
     if (/pollution|energy|污染|能源|環境/.test(text)) {
         return {
             label: "發展代價",
-            cause: "經濟成長留下污染與能源壓力，居民不再相信企業與政府會自己處理。",
-            stakes: "改革速度越快，投資與就業的反彈也越明顯。",
+            cause: "發展帶來工作，也留下污染和風險。",
+            stakes: "保護環境會增加成本；放著不管會傷害居民。",
             actors: ["威廉總裁", "艾達議員", "柯爾市長", "費教授"]
         };
     }
     if (/military|國安|軍事|安全|外部勢力/.test(text)) {
         return {
             label: "安全焦慮",
-            cause: "外部威脅被放大後，秩序派開始要求更強控制，改革派則擔心自由被交換掉。",
-            stakes: "你要判斷安全需求是真問題，還是被拿來壓縮公共討論。",
+            cause: "安全威脅升高，秩序派要求更強控制。",
+            stakes: "提高安全會讓人安心，也可能壓縮自由。",
             actors: ["雷將軍", "柯爾市長", "艾達議員", "蘇網紅"]
         };
     }
     if (/marriage|婚姻|平權|家庭/.test(text)) {
         return {
             label: "價值衝突",
-            cause: "新的權利訴求碰到傳統家庭想像，雙方都覺得自己的生活方式被威脅。",
-            stakes: "同理與制度設計如果斷開，議題會滑向身份對立。",
+            cause: "新的權利要求碰到傳統家庭觀念。",
+            stakes: "只挺一邊會讓另一邊覺得被排除。",
             actors: ["艾達議員", "莫長老", "費教授", "莉亞記者"]
         };
     }
     return {
         label: "信任危機",
-        cause: "制度信任太薄，一個事件就能讓舊矛盾重新浮上來。",
-        stakes: "誰先說服旁觀者，誰就能決定這件事被看成改革、失序或交換。",
+        cause: "大家不信任制度，所以小事件也會被放大。",
+        stakes: "你要先讓人相信：這不是又一次空話。",
         actors: [roleProfile().ally, roleProfile().skeptic, "柯爾市長", "莉亞記者"]
     };
 }
@@ -947,15 +1673,60 @@ function buildWhyPanel(event = {}) {
 function sceneQuestion(event = {}) {
     const lens = issueLens(event);
     const questions = {
-        "生計壓力": "當生活撐不下去時，誰應該先承擔改革成本？",
-        "世代衝突": "當新一代要求改變時，舊社群的不安該被說服、安撫，還是被推開？",
-        "資訊戰": "當謠言與管制同時出現時，民主應該先保護自由，還是先阻止傷害？",
-        "發展代價": "當發展留下污染與風險時，誰有權決定代價能不能被接受？",
-        "安全焦慮": "當安全成為理由時，人民願意交出多少自由？",
-        "價值衝突": "當權利擴張碰到傳統生活方式時，政治該怎麼讓雙方都被看見？",
-        "信任危機": "當所有人都不相信制度時，誰還能讓公共討論重新開始？"
+        "生計壓力": "誰先付改革成本？",
+        "世代衝突": "要加快改變，還是先安撫社區？",
+        "資訊戰": "先保護言論，還是先阻止傷害？",
+        "發展代價": "工作和環境，誰先被保護？",
+        "安全焦慮": "安全和自由，要怎麼取捨？",
+        "價值衝突": "怎麼讓雙方都被聽見？",
+        "責任危機": "誰要負責？",
+        "信任危機": "誰能讓大家重新相信制度？"
     };
     return questions[lens.label] || questions["信任危機"];
+}
+
+function scenePlayerPosition(event = {}) {
+    const previous = gameState.choiceHistory[gameState.choiceHistory.length - 1];
+    if (!previous) return directorPlayerPosition(event);
+
+    const toneRead = previous.tone === "oppose"
+        ? `${previous.npc}會先找你的破綻。`
+        : previous.tone === "support"
+            ? `${previous.npc}剛給你一點空間。`
+            : `${previous.npc}還在觀望。`;
+    return `你上一回合選擇「${compactText(previous.choiceText, 18)}」，讓${previous.effect}變成新的判斷標準。${toneRead}`;
+}
+
+function scenePressureLine(event = {}) {
+    const lens = issueLens(event);
+    const chapter = chapterInfo();
+    const lines = {
+        "生計壓力": "如果沒有人付錢，承諾就只是口號。",
+        "世代衝突": "年輕人要速度，社區要安全感。",
+        "資訊戰": "誰先定義真相，誰就先拿到政治優勢。",
+        "發展代價": "工作、污染與補償不能再分開談。",
+        "安全焦慮": "安全單位想要權限，公民團體要求監督。",
+        "價值衝突": "雙方都覺得自己正在被否定。",
+        "責任危機": "所有人都想知道：誰早就知道風險？",
+        "信任危機": "制度如果不給答案，大家就會找自己的答案。"
+    };
+    return `${chapter.pressure} ${lines[lens.label] || lines["信任危機"]}`;
+}
+
+function sceneDecisionFocus(event = {}) {
+    const lens = issueLens(event);
+    if (event.director_demand_data?.question) return event.director_demand_data.question;
+    const lines = {
+        "生計壓力": "你要決定先保護生活，還是先保護制度可行性。",
+        "世代衝突": "你要決定把衝突推進改革，還是先讓社區願意聽。",
+        "資訊戰": "你要決定先查證、先控管，還是先保護發聲空間。",
+        "發展代價": "你要決定誰先承擔轉型成本。",
+        "安全焦慮": "你要決定權力要先擴張，還是先被監督。",
+        "價值衝突": "你要決定如何讓一方不必靠消滅另一方來安心。",
+        "責任危機": "你要決定先追責、先救場，還是先保住談判空間。",
+        "信任危機": "你要決定用透明、秩序、改革或聲量修補信任。"
+    };
+    return lines[lens.label] || lines["信任危機"];
 }
 
 function buildSceneDossier(event = {}) {
@@ -982,69 +1753,441 @@ function buildSceneDossier(event = {}) {
         </div>`;
 }
 
+function pickLine(lines = [], seed = "") {
+    if (!lines.length) return "";
+    return lines[Math.abs(hashText(seed)) % lines.length];
+}
+
+function npcInterestProfile(name = "") {
+    const profiles = {
+        "柯爾市長": {
+            interest: "治理正當性",
+            risk: "市府被看成卸責或失控",
+            stance: "制度控場派",
+            redLine: "市府承擔無法說明的責任，或現場秩序失控。",
+            compromise: "可以開協調會、成立專案或讓議題進入行政程序。",
+            support: [
+                "我可以開協調會，但你要給我一個能向市民交代的責任版本。",
+                "只要局勢不失控，市府還有空間把衝突放進程序。"
+            ],
+            oppose: [
+                "如果你把所有責任都推到市府，我會先把程序門檻拉高。",
+                "你要的是改革，還是讓市府替所有人的怒氣買單？"
+            ],
+            watch: [
+                "我先看你能不能把壓力變成可處理的方案。",
+                "市府不是不回應，是還沒看到誰願意承擔後果。"
+            ]
+        },
+        "莫長老": {
+            interest: "社區安全感與長輩網絡",
+            risk: "社區被當成動員素材",
+            stance: "社區保守派",
+            redLine: "社區、長輩或家庭被當成政治敵人。",
+            compromise: "可以接受漸進溝通、旁聽協調與保留台階的改革。",
+            support: [
+                "如果你願意先讓居民知道風險，我可以幫你把話帶進社區。",
+                "你沒有把長輩當成阻礙，這點我會記住。"
+            ],
+            oppose: [
+                "社區不是你的舞台，別把長輩推成改革的敵人。",
+                "你每放大一次衝突，居民就更不想借你任何場地。"
+            ],
+            watch: [
+                "我不反對年輕人說話，但我要知道誰會收拾後果。",
+                "先別急著喊口號，社區要的是可預期的生活。"
+            ]
+        },
+        "艾達議員": {
+            interest: "把民意轉成法案與質詢",
+            risk: "議題被情緒吃掉，無法進入制度",
+            stance: "制度改革派",
+            redLine: "訴求只剩聲量，沒有證據、責任與條文方向。",
+            compromise: "願意承擔政治風險，但要能進入議會程序。",
+            support: [
+                "這個版本可以進質詢，但你要準備證人與時間線。",
+                "你把訴求整理得夠清楚，我就能讓它不只停在街頭。"
+            ],
+            oppose: [
+                "如果只剩怒氣，我沒辦法把它寫成條文。",
+                "你讓反對派有理由說這不是改革，而是施壓。"
+            ],
+            watch: [
+                "我等你拿出能被審議的版本。",
+                "政治不是只讓人聽見，還要讓承諾能被追蹤。"
+            ]
+        },
+        "威廉總裁": {
+            interest: "成本、投資與企業談判空間",
+            risk: "政策被聲量推著走，成本失控",
+            stance: "市場穩定派",
+            redLine: "企業被指定為唯一買單者，規則因聲量突然改寫。",
+            compromise: "能接受分期轉型、成本分攤與可預測規則。",
+            support: [
+                "如果你承認成本需要分攤，我願意坐下來談。",
+                "改革可以談，但不能把所有風險丟給企業。"
+            ],
+            oppose: [
+                "你把成本說得太輕，最後受傷的是工作與投資。",
+                "如果規則今天被聲量改寫，明天就沒有人敢投入。"
+            ],
+            watch: [
+                "我先看你是在談制度，還是在替壓力找出口。",
+                "你要我讓步，就要說清楚誰付錢、誰負責。"
+            ]
+        },
+        "莉亞記者": {
+            interest: "可查證的時間線與公共真相",
+            risk: "被任何一方當成擴音器",
+            stance: "查證揭露派",
+            redLine: "任何陣營要求她只報有利版本，或避開關鍵證據。",
+            compromise: "願意讓情緒成為入口，但結論必須回到證據。",
+            support: [
+                "給我文件與時間線，我可以讓事件不被一句話帶走。",
+                "你願意把證據攤開，這就值得追下去。"
+            ],
+            oppose: [
+                "你想要報導，就不要只給我情緒和標語。",
+                "我不會替任何人補敘事漏洞，包含你。"
+            ],
+            watch: [
+                "我先不站隊，我要看誰的說法經得起查證。",
+                "故事現在還缺關鍵證據，誰急著定調都可疑。"
+            ]
+        },
+        "龐頭目": {
+            interest: "基層談判籌碼與組織能見度",
+            risk: "基層再次被安撫後排除",
+            stance: "基層動員派",
+            redLine: "基層只被拿來當背景，最後沒有談判位置。",
+            compromise: "可以降溫，但前提是桌上有席位與具體交換。",
+            support: [
+                "你讓基層坐上桌，我的人就願意先穩住場面。",
+                "只要不是空頭承諾，我可以把壓力轉成談判。"
+            ],
+            oppose: [
+                "別拿基層當背景，事情收場後又叫我們回去等。",
+                "你如果只想漂亮落幕，我的人不會替你鼓掌。"
+            ],
+            watch: [
+                "我看的是你有沒有把痛苦換成籌碼。",
+                "話說得再好，沒有談判位置就只是安撫。"
+            ]
+        },
+        "雷將軍": {
+            interest: "安全邊界與秩序可控",
+            risk: "外部威脅與內部混亂互相放大",
+            stance: "安全秩序派",
+            redLine: "現場失控、外部勢力可介入，或權責邊界模糊。",
+            compromise: "可以退後一步，但要有清楚風險控管與授權邊界。",
+            support: [
+                "你先把現場風險壓住，我才有理由不升高管制。",
+                "只要邊界清楚，安全系統可以暫時退到後面。"
+            ],
+            oppose: [
+                "你低估混亂的傳染速度，安全部門不會陪你賭。",
+                "自由不是失控的通行證，誰負責收尾？"
+            ],
+            watch: [
+                "我先看現場會不會被人利用。",
+                "安全問題不能只靠善意，它需要邊界。"
+            ]
+        },
+        "費教授": {
+            interest: "證據、制度設計與長期成本",
+            risk: "公共討論被情緒取代",
+            stance: "理性制度派",
+            redLine: "情緒、陰謀或口號取代證據與制度設計。",
+            compromise: "可以承認價值衝突，但要把成本與責任拆清楚。",
+            support: [
+                "你把問題拆成責任與制度缺口，討論才有機會前進。",
+                "這個選擇至少讓長期成本被看見。"
+            ],
+            oppose: [
+                "你把複雜問題剪成口號，最後會讓政策不可檢驗。",
+                "情緒可以啟動政治，但不能替代制度設計。"
+            ],
+            watch: [
+                "我需要看見證據，而不是誰的聲量比較大。",
+                "先把價值判斷和事實判斷分開。"
+            ]
+        },
+        "蘇網紅": {
+            interest: "注意力、敘事速度與可傳播性",
+            risk: "事件太複雜，觀眾失去興趣",
+            stance: "聲量敘事派",
+            redLine: "訊息太慢、太複雜，無法讓大眾理解或轉發。",
+            compromise: "願意幫忙擴散，但會把複雜議題剪成清楚衝突。",
+            support: [
+                "這句話能剪出去，而且觀眾聽得懂。",
+                "你給了我一個清楚衝突點，聲量會自己長。"
+            ],
+            oppose: [
+                "這太像會議紀錄了，沒有人會轉。",
+                "你講得越複雜，我越能把它剪成另一個故事。"
+            ],
+            watch: [
+                "我先看哪一句能讓大家停下來。",
+                "事件要爆，不是因為完整，是因為夠尖。"
+            ]
+        }
+    };
+
+    return profiles[name] || {
+        interest: "保住自己的位置",
+        risk: "籌碼失效",
+        stance: "觀望派",
+        redLine: "自己的籌碼被消耗。",
+        compromise: "願意向優勢方靠近。",
+        support: ["這一步讓我看見合作空間。"],
+        oppose: ["這一步讓我更難相信你。"],
+        watch: ["我還在看你下一步。"]
+    };
+}
+
+function lensSpecificVoice(name = "", lensLabel = "", text = "") {
+    const lines = {
+        "柯爾市長": {
+            "生計壓力": ["薪資與補貼不能只靠市府喊話，財源與責任要同時交代。"],
+            "世代衝突": ["學生不是問題，問題是誰能把抗議帶回可治理的流程。"],
+            "資訊戰": ["如果真相被網路先定義，市府再慢半拍就會變成被告。"],
+            "發展代價": ["污染與開發都會回到市府桌上，沒有人會接受『不歸我管』。"],
+            "安全焦慮": ["安全牌一旦打出來，市府就不能再只當旁觀者。"],
+            "價值衝突": ["我不能只討好一邊，否則另一邊會覺得市府放棄他們。"]
+        },
+        "莫長老": {
+            "生計壓力": ["社區裡也有人撐不下去，但他們怕抗爭把生活弄得更亂。"],
+            "世代衝突": ["年輕人要改變可以，但不能把長輩都推成壞人。"],
+            "資訊戰": ["群組裡一句話就能讓鄰里翻臉，我最怕這個。"],
+            "發展代價": ["居民不是反對發展，是不想最後只剩我們承擔污染。"],
+            "價值衝突": ["傳統不是武器，但也不能被一句進步就掃掉。"]
+        },
+        "艾達議員": {
+            "生計壓力": ["如果有明確受害者與財源，我可以把它變成質詢。"],
+            "世代衝突": ["我要的是能讓學生、家長與校方同桌的版本。"],
+            "資訊戰": ["言論自由和傷害防制要分開設計，不然法案會被打爛。"],
+            "發展代價": ["環境成本要進入審查，不然改革只是換一群人受傷。"],
+            "安全焦慮": ["國安不能成為空白授權，權力邊界要寫清楚。"],
+            "價值衝突": ["權利要被寫進制度，才不會每次都重新吵一遍。"]
+        },
+        "威廉總裁": {
+            "生計壓力": ["加薪不是一句正義就能完成，現金流和訂單也會一起動。"],
+            "世代衝突": ["年輕人要未來，企業也要可預測的規則。"],
+            "資訊戰": ["市場最怕不確定，謠言一天就能讓投資縮手。"],
+            "發展代價": ["環保可以談，但不能把轉型成本假裝不存在。"],
+            "安全焦慮": ["安全風險升高，供應鏈就會先收縮。"]
+        },
+        "莉亞記者": {
+            "生計壓力": ["我要找的是誰被犧牲、誰把責任說成技術問題。"],
+            "世代衝突": ["如果只拍衝突畫面，真正的訴求就會消失。"],
+            "資訊戰": ["所有人都想先定調，我偏要從時間線開始查。"],
+            "發展代價": ["污染數據、會議紀錄、居民證詞，缺一個都不能結案。"],
+            "安全焦慮": ["安全單位越急，我越要問授權依據在哪裡。"],
+            "價值衝突": ["我不只要拍支持者，也要拍害怕的人為什麼害怕。"]
+        },
+        "龐頭目": {
+            "生計壓力": ["工人不是數字，沒有談判位置就只能把壓力留在街上。"],
+            "世代衝突": ["學生有聲量，基層有身體，兩邊如果接不起來就會被各個擊破。"],
+            "資訊戰": ["網路吵得再大，現場有沒有人才是真的。"],
+            "發展代價": ["污染和低薪常常落在同一群人身上，別把它拆開談。"],
+            "安全焦慮": ["一扣上安全帽子，基層訴求就很容易被消音。"]
+        },
+        "雷將軍": {
+            "資訊戰": ["假消息不是意見，是能被外部勢力利用的破口。"],
+            "安全焦慮": ["我只問一件事：失控時誰有權下命令？"],
+            "世代衝突": ["學生行動如果被人借力，後果不是校園自己能承擔。"],
+            "發展代價": ["能源與工業安全不是地方議題，它會牽動整個國家韌性。"]
+        },
+        "費教授": {
+            "生計壓力": ["分配問題不能只問誰可憐，也要問制度怎麼持續。"],
+            "世代衝突": ["世代不是答案，真正的問題是誰被排除在決策外。"],
+            "資訊戰": ["資訊戰最怕的是大家用立場代替查證。"],
+            "發展代價": ["外部成本被藏起來時，市場價格本身就會說謊。"],
+            "安全焦慮": ["安全和自由不是二選一，而是權力如何被監督。"],
+            "價值衝突": ["價值衝突需要制度翻譯，不是誰比較大聲。"]
+        },
+        "蘇網紅": {
+            "生計壓力": ["『誰付不起帳單』比『制度改革』更容易讓人停下來看。"],
+            "世代衝突": ["年輕人對長輩，這標題很爆，但也最容易失真。"],
+            "資訊戰": ["你不先說故事，別人就會替你剪一版。"],
+            "發展代價": ["污染畫面很好傳，但誰要付轉型成本就比較難講。"],
+            "安全焦慮": ["國安兩個字自帶流量，也自帶恐懼。"],
+            "價值衝突": ["這種議題不能太抽象，要讓觀眾看到一個家庭怎麼被影響。"]
+        }
+    };
+
+    const roleLines = lines[name]?.[lensLabel] || [];
+    if (/車禍|事故|意外|工安|傷亡/.test(text)) {
+        const accident = {
+            "柯爾市長": ["我第一個要知道的是：市府有沒有提早收到風險通報。"],
+            "莉亞記者": ["事故不是悲劇標題而已，我要的是責任鏈。"],
+            "雷將軍": ["現場秩序如果再亂，事故會立刻變成治理危機。"],
+            "費教授": ["先分清楚意外、疏失與制度漏洞，否則只會找代罪者。"],
+            "艾達議員": ["如果有制度漏洞，這就不能只用慰問收場。"]
+        }[name] || [];
+        return accident.length ? accident : roleLines;
+    }
+    if (/醜聞|賄|貪腐|黑箱|弊案/.test(text)) {
+        const scandal = {
+            "柯爾市長": ["如果被看成包庇，市府後面說什麼都會被當成遮掩。"],
+            "莉亞記者": ["有人越急著切割，越代表文件還沒攤開。"],
+            "費教授": ["透明不是形象工程，是讓責任可以被檢驗。"],
+            "蘇網紅": ["黑箱兩個字就夠了，接下來大家會自己補故事。"],
+            "威廉總裁": ["企業最怕被拖進政治醜聞，投資會先縮手。"]
+        }[name] || [];
+        return scandal.length ? scandal : roleLines;
+    }
+    return roleLines;
+}
+
 function stakeholderVoice(name, event = {}) {
     const lens = issueLens(event);
     const text = eventText(event);
     const trust = gameState.npcApprovals?.[name] ?? ensureCharacterArc(name)?.trust ?? 50;
-    const mood = trust >= 70
-        ? "他現在比較願意靠近你，"
+    const profile = npcInterestProfile(name);
+    const posture = trust >= 70
+        ? `因為你先前沒有踩到他的核心利益，`
         : trust <= 30
-            ? "他已經對你有戒心，"
+            ? `因為你已經碰到他的「${profile.risk}」，`
             : "";
-    const voices = {
-        "柯爾市長": "我要知道這會不會讓市府失去控制。",
-        "莫長老": "不要把社區變成政治衝突的戰場。",
-        "艾達議員": "如果要改，就要能進入正式程序。",
-        "威廉總裁": "改革不能讓成本完全失控。",
-        "莉亞記者": "誰在說真話？誰只是改寫敘事？",
-        "龐頭目": "沒有壓力，就不會有人坐下來談。",
-        "雷將軍": "自由不能成為失序的藉口。",
-        "費教授": "先把證據與長期成本講清楚。",
-        "蘇網紅": "這件事如果說得夠簡單，就會爆。"
+    const specific = lensSpecificVoice(name, lens.label, text);
+    const candidates = specific.length ? specific : profile.watch;
+    const line = pickLine(candidates, `${name}|${lens.label}|${event.title}|${gameState.currentEventIndex}|${trust}`);
+    return `${posture}${line}`;
+}
+
+function npcIssuePosition(name = "", event = {}) {
+    const lens = issueLens(event).label;
+    const profile = npcInterestProfile(name);
+    const table = {
+        "柯爾市長": {
+            "責任危機": ["自保但必須回應", "要查清責任，但不能讓市府變成唯一代罪者。"],
+            "生計壓力": ["條件支持", "只要財源與責任清楚，就願意進行政程序。"],
+            "世代衝突": ["控場優先", "支持學生被聽見，但不能讓市府被街頭拖著走。"],
+            "資訊戰": ["查證後回應", "怕市府慢半拍變成遮掩，但也怕倉促定調。"],
+            "發展代價": ["風險治理", "污染與開發都要有人負責，不能只靠公關。"],
+            "安全焦慮": ["秩序優先", "一旦被定義成安全問題，市府會先保守。"],
+            "價值衝突": ["平衡兩端", "不想讓任何一邊覺得市府放棄他們。"]
+        },
+        "莫長老": {
+            "責任危機": ["保護居民", "要求先照顧受影響的人，不要只開記者會。"],
+            "生計壓力": ["謹慎同情", "理解壓力，但反對把社區拖進衝突。"],
+            "世代衝突": ["保護社區", "願意聽年輕人，但不能把長輩塑造成敵人。"],
+            "資訊戰": ["防止撕裂", "最怕群組謠言讓鄰里互相仇視。"],
+            "發展代價": ["居民優先", "反對居民承擔發展後果卻沒有發言權。"],
+            "價值衝突": ["傳統保留", "接受討論，但要保留傳統社群的尊嚴。"]
+        },
+        "艾達議員": {
+            "責任危機": ["要求調查", "要把事故從慰問推進到調查和制度修補。"],
+            "生計壓力": ["改革推進", "只要能說明受害者與財源，就能推質詢。"],
+            "世代衝突": ["程序轉化", "要把街頭壓力轉成校方或市府必須回應的流程。"],
+            "資訊戰": ["權利設計", "同時保護言論與降低傷害，需要清楚邊界。"],
+            "發展代價": ["制度審查", "要求把環境成本寫進審查與補償。"],
+            "安全焦慮": ["監督權力", "國安不能成為空白授權。"],
+            "價值衝突": ["權利入法", "把權利寫進制度，避免每次重新撕裂。"]
+        },
+        "威廉總裁": {
+            "責任危機": ["切清責任", "支持調查，但反對還沒查清就把成本丟給企業。"],
+            "生計壓力": ["成本警戒", "支持改善待遇，但反對無財源、無緩衝的改革。"],
+            "世代衝突": ["規則穩定", "年輕人要未來，企業要可預測規則。"],
+            "資訊戰": ["市場避險", "謠言會讓投資先縮手。"],
+            "發展代價": ["轉型分攤", "環保可以談，但成本不能被假裝不存在。"],
+            "安全焦慮": ["供應鏈安全", "安全風險升高會先傷害投資與就業。"]
+        },
+        "莉亞記者": {
+            "責任危機": ["追責查證", "要時間線、通報紀錄和誰延誤了處理。"],
+            "生計壓力": ["追責查證", "要找誰被犧牲、誰把責任說成技術問題。"],
+            "世代衝突": ["避免扁平化", "不只拍衝突，也追真正訴求。"],
+            "資訊戰": ["時間線優先", "不讓任何陣營先替真相定稿。"],
+            "發展代價": ["證據揭露", "數據、會議紀錄、居民證詞缺一不可。"],
+            "安全焦慮": ["追問授權", "越是安全名義，越要問依據。"],
+            "價值衝突": ["多方可見", "支持者和害怕的人都要被看見。"]
+        },
+        "龐頭目": {
+            "責任危機": ["要求補償", "如果受傷的是基層，就不能只用道歉收場。"],
+            "生計壓力": ["談判施壓", "沒有談判位置，基層只能留在街上。"],
+            "世代衝突": ["街頭串聯", "學生聲量要接上基層身體，否則會被切開。"],
+            "資訊戰": ["現場為真", "網路再吵，現場有沒有人才是籌碼。"],
+            "發展代價": ["成本正義", "污染和低薪常落在同一群人身上。"],
+            "安全焦慮": ["反消音", "一扣上安全帽子，基層訴求就容易被消音。"]
+        },
+        "雷將軍": {
+            "責任危機": ["先穩現場", "事故會變成秩序危機，現場不能再亂。"],
+            "世代衝突": ["防滲透", "學生行動若被外力借力，後果不是校園能承擔。"],
+            "資訊戰": ["安全破口", "假消息不是意見，而是可被利用的破口。"],
+            "發展代價": ["韌性安全", "能源與工安會牽動國家韌性。"],
+            "安全焦慮": ["邊界優先", "先問失控時誰有權下命令。"]
+        },
+        "費教授": {
+            "責任危機": ["拆清責任", "先分清意外、疏失和制度漏洞。"],
+            "生計壓力": ["制度持續", "分配問題要同時問正義與可持續。"],
+            "世代衝突": ["排除分析", "不是世代本身，而是誰被排除在決策外。"],
+            "資訊戰": ["反立場先行", "最怕大家用立場代替查證。"],
+            "發展代價": ["外部成本", "成本被藏起來時，價格本身會說謊。"],
+            "安全焦慮": ["權力監督", "安全和自由不是二選一，而是權力如何被監督。"],
+            "價值衝突": ["制度翻譯", "價值衝突要被制度翻譯，不是誰比較大聲。"]
+        },
+        "蘇網紅": {
+            "責任危機": ["放大矛盾", "事故需要一個清楚問題：誰害大家受傷？"],
+            "生計壓力": ["故事化", "具體帳單比制度改革更容易被理解。"],
+            "世代衝突": ["高傳播風險", "世代對立很爆，也最容易失真。"],
+            "資訊戰": ["先搶敘事", "你不先說故事，別人就會替你剪一版。"],
+            "發展代價": ["視覺衝突", "污染畫面好傳，成本分攤難講。"],
+            "安全焦慮": ["恐懼流量", "國安自帶流量，也自帶恐懼。"],
+            "價值衝突": ["生活化", "抽象權利要變成一個家庭如何受影響。"]
+        }
     };
-    let line = voices[name] || "我還在看你會把局勢推向哪裡。";
+    const [label, reason] = table[name]?.[lens] || [profile.stance, `核心利益：${profile.interest}；可妥協：${profile.compromise}`];
+    return { label, reason };
+}
 
-    if (/車禍|事故|意外|工安|傷亡/.test(text)) {
-        const accidentLines = {
-            "柯爾市長": "第一個問題會是市府有沒有提早知道風險。",
-            "莉亞記者": "我要的是時間線，不是安撫稿。",
-            "雷將軍": "事故會被放大成治理失能，現場秩序要先穩住。",
-            "費教授": "先分清楚責任、制度缺口與情緒歸因。"
-        };
-        line = accidentLines[name] || line;
-    } else if (/醜聞|賄|貪腐|黑箱|弊案/.test(text)) {
-        const scandalLines = {
-            "柯爾市長": "如果這被看成市府包庇，我的執政正當性會直接受傷。",
-            "莉亞記者": "有人想把焦點轉走，代表真正的文件還沒出來。",
-            "費教授": "沒有透明程序，任何承諾都只會變成新的不信任。",
-            "蘇網紅": "黑箱兩個字就夠了，接下來所有人都會站隊。"
-        };
-        line = scandalLines[name] || line;
-    } else if (lens.label === "資訊戰" && name === "雷將軍") {
-        line = "假消息不是意見，是安全破口。";
-    } else if (lens.label === "生計壓力" && name === "龐頭目") {
-        line = "如果大家活不下去，秩序只是好看的字。";
-    } else if (lens.label === "發展代價" && name === "威廉總裁") {
-        line = "太快轉彎，工廠、工作與投資都會一起掉下去。";
+function continuityLead(name = "", tone = "watch", event = {}) {
+    const previous = gameState.npcContinuity?.[name];
+    const profile = npcInterestProfile(name);
+    const lens = issueLens(event).label;
+    if (!previous) return `他的基本立場是「${profile.stance}」。`;
+    if (previous.tone !== tone) {
+        if (tone === "support") {
+            return `雖然上一回合他在「${previous.lens}」對你保留，但這次沒有踩到「${profile.redLine}」，所以態度轉為鬆動。`;
+        }
+        if (tone === "oppose") {
+            return `雖然上一回合他曾靠近你，但這次碰到紅線：「${profile.redLine}」，所以開始反制。`;
+        }
+        return `上一回合他是「${previous.label}」，這次先退回觀望，因為他要確認「${profile.interest}」有沒有被照顧。`;
     }
+    if (previous.lens === lens) return `延續他在「${lens}」上的立場，`;
+    return `從上一回合「${previous.lens}」轉到「${lens}」，他仍用「${profile.interest}」判斷，`;
+}
 
-    return `${mood}${line}`;
+function rememberNpcContinuity(reaction = {}, event = {}) {
+    if (!reaction.npc) return;
+    const lens = issueLens(event).label;
+    const position = npcIssuePosition(reaction.npc, event);
+    gameState.npcContinuity[reaction.npc] = {
+        tone: reaction.tone,
+        lens,
+        label: position.label,
+        turn: gameState.currentEventIndex + 1
+    };
 }
 
 function renderStakeholderCouncil(event = {}) {
     const names = involvedCharactersForEvent(event);
     return `
         <div class="stakeholder-council">
-            <div class="council-title">場上正在互相拉扯的人</div>
-            ${names.slice(0, 5).map((name) => `
-                <article>
-                    ${renderAvatar(name, "council-avatar")}
-                    <div>
-                        <b>${escapeHTML(name)}</b>
-                        <span>${escapeHTML(stakeholderVoice(name, event))}</span>
-                    </div>
-                </article>
-            `).join("")}
+            <div class="council-title">這回合會影響誰</div>
+            ${names.slice(0, 4).map((name) => {
+                const position = npcIssuePosition(name, event);
+                return `
+                    <article>
+                        ${renderAvatar(name, "council-avatar")}
+                        <div>
+                            <b>${escapeHTML(name)} · ${escapeHTML(position.label)}</b>
+                            <span>${escapeHTML(stakeholderVoice(name, event))}</span>
+                            <em>${escapeHTML(position.reason)}</em>
+                        </div>
+                    </article>`;
+            }).join("")}
         </div>`;
 }
 
@@ -1377,26 +2520,18 @@ function buildStoryBridge(ev) {
 
 function buildEventBrief(ev) {
     const chapter = chapterInfo();
-    const hook = gameState.nextHook
-        ? `<div class="next-hook">${escapeHTML(gameState.nextHook)}</div>`
-        : "";
     const lens = issueLens(ev);
-    const beat = currentArcBeat();
-    const previous = gameState.choiceHistory[gameState.choiceHistory.length - 1];
-    const previousLine = previous
-        ? ev.is_news
-            ? `這是一則插入式新聞：它不是主線跳掉，而是外部事件改變各角色手上的籌碼。`
-            : previous.lens && previous.lens !== lens.label
-                ? `上一幕是「${previous.lens}」，這一幕轉到「${lens.label}」；各方會把前一回合的「${previous.effect}」拿來解讀新事件。`
-                : `上一幕你讓「${previous.effect}」成為焦點，現在各方開始把它轉成自己的說法。`
-        : compactText(roleProfile().throughline, 54);
+    const playerLine = ev.is_news
+        ? "這則新聞不是插曲，它會改變場上角色的談判籌碼。"
+        : scenePlayerPosition(ev);
     return `
         <div class="chapter-strip">
             <span>${escapeHTML(chapter.label)}</span>
             <strong>第 ${gameState.currentEventIndex + 1} / ${gameState.events.length} 回合</strong>
         </div>
-        ${hook}
-        <p class="event-one-line">${escapeHTML(compactText(ev.description, 64))}</p>
+        <p class="event-one-line">${escapeHTML(compactText(ev.description, 72))}</p>
+        ${renderNewsContent(ev)}
+        ${renderIssueDemand(ev)}
         <section class="scene-brief">
             <header>
                 <span>${escapeHTML(lens.label)}</span>
@@ -1404,19 +2539,23 @@ function buildEventBrief(ev) {
             </header>
             <div class="scene-brief-grid">
                 <article>
-                    <small>為什麼現在爆發</small>
+                    <small>引爆點</small>
                     <strong>${escapeHTML(lens.cause)}</strong>
                 </article>
                 <article>
-                    <small>${escapeHTML(beat.label)}</small>
-                    <strong>${escapeHTML(previousLine)}</strong>
+                    <small>你的位置</small>
+                    <strong>${escapeHTML(playerLine)}</strong>
                 </article>
                 <article>
-                    <small>這件事的代價</small>
-                    <strong>${escapeHTML(lens.stakes)}</strong>
+                    <small>現在的壓力</small>
+                    <strong>${escapeHTML(scenePressureLine(ev))}</strong>
                 </article>
             </div>
         </section>
+        <div class="scene-focus">
+            <b>本回合主要問題</b>
+            <span>${escapeHTML(sceneDecisionFocus(ev))}</span>
+        </div>
         ${renderStakeholderCouncil(ev)}
     `;
 }
@@ -1437,38 +2576,95 @@ function neutralizePersuasionLabel(text = "") {
         .trim();
 }
 
-function npcShiftReactionText(npc, delta, effects = {}) {
+function npcShiftReactionText(npc, delta, effects = {}, event = {}) {
+    const lens = issueLens(event).label;
+    const profile = npcInterestProfile(npc);
+    const seed = `${npc}|${delta}|${lens}|${effectToken(effects)}|${gameState.currentEventIndex}`;
     if (delta < 0) {
         const lines = {
-            "柯爾市長": "市長幕僚開始擔心這件事會被寫成治理失能，而不是單一意外。",
-            "莫長老": "莫長老把你的路線看成對社區秩序的冒進，開始提醒熟人保持距離。",
-            "艾達議員": "艾達議員覺得你讓議題更難進入正式程序，暫時收回支援。",
-            "威廉總裁": "威廉總裁認為成本被你推到企業身上，開始尋找反制盟友。",
-            "莉亞記者": "莉亞記者覺得你避開了關鍵事實，準備用報導檢視你的說法。",
-            "龐頭目": "龐頭目覺得基層又被要求等待，街頭組織開始不耐。",
-            "雷將軍": "雷將軍認為你低估失控風險，會把安全牌拿得更高。",
-            "費教授": "費教授認為你的說法過度簡化，準備公開拆解。",
-            "蘇網紅": "蘇網紅覺得你給了他反向剪輯的素材。"
+            "柯爾市長": [
+                "市長幕僚開始擔心這件事會被寫成治理失能，而不是單一事件。",
+                `你讓「${profile.interest}」受傷，市府會先保護自己的責任邊界。`
+            ],
+            "莫長老": [
+                "莫長老把你的路線看成對社區秩序的冒進，開始提醒熟人保持距離。",
+                "他不是單純討厭改變，而是覺得你把社區安全感拿去交換聲量。"
+            ],
+            "艾達議員": [
+                "艾達議員覺得你讓議題更難進入正式程序，暫時收回支援。",
+                "她擔心這一幕會被反對派拿來證明改革派只會施壓。"
+            ],
+            "威廉總裁": [
+                "威廉總裁認為成本被你推到企業身上，開始尋找反制盟友。",
+                "他會把你的選擇包裝成投資不確定性，拿去說服商會。"
+            ],
+            "莉亞記者": [
+                "莉亞記者覺得你避開了關鍵事實，準備用報導檢視你的說法。",
+                "她開始把鏡頭轉向你：為什麼你選擇這個版本的真相？"
+            ],
+            "龐頭目": [
+                "龐頭目覺得基層又被要求等待，街頭組織開始不耐。",
+                "他會告訴群眾：沒有壓力，桌上就不會有基層的位置。"
+            ],
+            "雷將軍": [
+                "雷將軍認為你低估失控風險，會把安全牌拿得更高。",
+                "他會把這件事重新定義成秩序破口，要求更強邊界。"
+            ],
+            "費教授": [
+                "費教授認為你的說法過度簡化，準備公開拆解。",
+                "他會把這一幕當成案例，提醒大家情緒不能替代制度設計。"
+            ],
+            "蘇網紅": [
+                "蘇網紅覺得你給了他反向剪輯的素材。",
+                "他會把你的矛盾剪成短片，讓觀眾先笑再站隊。"
+            ]
         };
-        return lines[npc] || `${npc}把這次選擇記成你的政治弱點。`;
+        return pickLine(lines[npc] || [`${npc}把這次選擇記成你的政治弱點。`], seed);
     }
 
     const [key, value] = strongestEffect(effects);
     const lines = {
-        "柯爾市長": "市府暫時看見可控的收場方式，但仍要求你補上責任歸屬。",
-        "莫長老": "莫長老覺得你至少沒有把社區安全感完全推開。",
-        "艾達議員": "艾達議員看見能把議題送進質詢或法案的入口。",
-        "威廉總裁": "威廉總裁願意談，但會要求你承認改革成本。",
-        "莉亞記者": "莉亞記者拿到可追查的線索，準備延伸報導。",
-        "龐頭目": "龐頭目看見談判籌碼增加，願意先不翻桌。",
-        "雷將軍": "雷將軍認為場面還能被控住，暫時放低警戒。",
-        "費教授": "費教授認為討論還有機會回到證據與制度設計。",
-        "蘇網紅": "蘇網紅抓到能讓更多人理解事件的敘事。"
+        "柯爾市長": [
+            "市府暫時看見可控的收場方式，但仍要求你補上責任歸屬。",
+            "他願意給你一點行政空間，因為這一幕沒有直接炸掉治理正當性。"
+        ],
+        "莫長老": [
+            "莫長老覺得你至少沒有把社區安全感完全推開。",
+            "他會先壓住社區群組裡的反彈，看看你是否真的願意溝通。"
+        ],
+        "艾達議員": [
+            "艾達議員看見能把議題送進質詢或法案的入口。",
+            "她會要求幕僚整理材料，因為這次有機會從口號變成程序。"
+        ],
+        "威廉總裁": [
+            "威廉總裁願意談，但會要求你承認改革成本。",
+            "他暫時不反擊，因為你還沒有把企業塑造成唯一壞人。"
+        ],
+        "莉亞記者": [
+            "莉亞記者拿到可追查的線索，準備延伸報導。",
+            "她願意繼續跟，因為這次有文件、時間線或責任鏈可查。"
+        ],
+        "龐頭目": [
+            "龐頭目看見談判籌碼增加，願意先不翻桌。",
+            "他會把街頭壓力收束成談判條件，而不是立刻升高行動。"
+        ],
+        "雷將軍": [
+            "雷將軍認為場面還能被控住，暫時放低警戒。",
+            "他願意退一步，前提是安全邊界沒有被你說成多餘。"
+        ],
+        "費教授": [
+            "費教授認為討論還有機會回到證據與制度設計。",
+            "他會把你的選擇拿來示範：情緒可以降溫，問題仍要處理。"
+        ],
+        "蘇網紅": [
+            "蘇網紅抓到能讓更多人理解事件的敘事。",
+            "他覺得這一幕可以做成一支不只煽動、也能解釋的短片。"
+        ]
     };
-    return lines[npc] || `${npc}看見${effectLabel(key)}${effectDirection(value)}，暫時願意靠近。`;
+    return pickLine(lines[npc] || [`${npc}看見${effectLabel(key)}${effectDirection(value)}，暫時願意靠近。`], seed);
 }
 
-function buildNpcReaction(beforeApprovals, effects, pTarget, isPHigh) {
+function buildNpcReaction(beforeApprovals, effects, pTarget, isPHigh, event = {}) {
     let npc = pTarget || "";
     let text = "";
     let tone = "watch";
@@ -1477,9 +2673,15 @@ function buildNpcReaction(beforeApprovals, effects, pTarget, isPHigh) {
         const after = gameState.npcApprovals[npc];
         const before = beforeApprovals[npc] ?? after;
         tone = after >= before ? "support" : "oppose";
-        text = isPHigh
-            ? `${npc}沒有完全被說服，但願意暫時留在談判桌上。`
-            : `${npc}把這次衝突記了下來，之後更可能在關鍵場合阻擋你。`;
+        if (isPHigh && tone === "support") {
+            text = `${npcDialogueLine(npc, "support", event, effects, "persuasion")} 他沒有完全放心，但願意暫時留在談判桌上。`;
+        } else if (isPHigh) {
+            text = `${npcDialogueLine(npc, "oppose", event, effects, "persuasion")} 他聽懂你的理由，卻仍認為代價被推到自己身上。`;
+        } else if (tone === "support") {
+            text = `${npcDialogueLine(npc, "watch", event, effects, "persuasion")} 你的說服不漂亮，但局勢讓他暫時不反制。`;
+        } else {
+            text = `${npcDialogueLine(npc, "oppose", event, effects, "persuasion")} 他把這次衝突記下來，之後更可能在關鍵場合阻擋你。`;
+        }
     } else {
         const shifted = Object.entries(gameState.npcApprovals || {})
             .map(([name, after]) => [name, after - (beforeApprovals[name] ?? after)])
@@ -1489,33 +2691,35 @@ function buildNpcReaction(beforeApprovals, effects, pTarget, isPHigh) {
         if (shifted) {
             npc = shifted[0];
             tone = shifted[1] >= 0 ? "support" : "oppose";
-            text = npcShiftReactionText(npc, shifted[1], effects);
+            text = npcShiftReactionText(npc, shifted[1], effects, event);
         } else if ((effects.freedom || 0) > 0) {
             npc = "艾達議員";
             tone = "support";
-            text = "艾達議員把你的說法轉給幕僚，暗示可以幫忙找正式質詢入口。";
+            text = npcDialogueLine(npc, tone, event, effects, "reaction");
         } else if ((effects.order || 0) > 0) {
             npc = "雷將軍";
             tone = "support";
-            text = "雷將軍稱讚你讓場面降溫，但也提醒你別再把街頭壓力帶進市府。";
+            text = npcDialogueLine(npc, tone, event, effects, "reaction");
         } else if ((effects.populism || 0) > 0 || (effects.order || 0) < 0) {
             npc = "莫長老";
             tone = "oppose";
-            text = "莫長老在社區群組提醒大家保持距離，說這件事已經被年輕人帶偏。";
+            text = npcDialogueLine(npc, tone, event, effects, "reaction");
         } else if ((effects.progress || 0) > 0) {
             npc = "莉亞記者";
             tone = "support";
-            text = "莉亞記者要求你提供更完整的時間線，準備把事件做成追蹤報導。";
+            text = npcDialogueLine(npc, tone, event, effects, "reaction");
         } else {
             npc = "柯爾市長";
             tone = "watch";
-            text = "市長辦公室沒有公開回應，但幕僚開始觀察你背後還有多少人。";
+            text = npcDialogueLine(npc, tone, event, effects, "reaction");
         }
     }
 
+    text = `${continuityLead(npc, tone, event)}${text}`;
     const memory = { turn: gameState.currentEventIndex + 1, npc, tone, text };
     gameState.memories.push(memory);
     gameState.memories = gameState.memories.slice(-4);
+    rememberNpcContinuity(memory, event);
     return memory;
 }
 
@@ -1523,7 +2727,86 @@ function buildNpcInteraction(reaction, effects) {
     return buildNpcExchange(reaction, effects).summary;
 }
 
-function buildNpcExchange(reaction, effects) {
+function npcDialogueLine(name = "", tone = "watch", event = {}, effects = {}, side = "actor") {
+    const profile = npcInterestProfile(name);
+    const lens = issueLens(event).label;
+    const [key, value] = strongestEffect(effects);
+    const seed = `${name}|${tone}|${lens}|${key}|${value}|${side}|${gameState.currentEventIndex}`;
+    const issueLine = pickLine(lensSpecificVoice(name, lens, eventText(event)) || [], `${seed}|issue`);
+    if (issueLine) {
+        const endings = {
+            support: [
+                `所以我可以靠近，但條件是：${profile.compromise}`,
+                `這次沒有踩到我的底線，我願意把「${profile.interest}」放進合作。`
+            ],
+            oppose: [
+                `但你的做法踩到我的底線：${profile.redLine}`,
+                `如果你不補上代價說明，我會從「${profile.risk}」這裡反制。`
+            ],
+            watch: [
+                `我先看你下一步有沒有照顧「${profile.interest}」。`,
+                `這件事還不能只看口號，我要看誰承擔成本。`
+            ]
+        };
+        return `${issueLine}${pickLine(endings[tone] || endings.watch, `${seed}|ending`)}`;
+    }
+    const roleLines = {
+        "柯爾市長": {
+            support: ["我可以給你一場協調會，但你要讓市府有能說出口的責任分工。", "如果這能穩住局勢，我願意把它排進正式議程。"],
+            oppose: ["你把治理正當性打穿，我就只能先守住市府邊界。", "我不會讓市府變成所有怒氣的出口。"],
+            watch: ["先拿出能處理的版本，不然這只會變成下一場記者會。"]
+        },
+        "莫長老": {
+            support: ["你願意先說清楚對社區的影響，我就能幫你擋一點反彈。", "別把長輩當敵人，這樣我還能替你說話。"],
+            oppose: ["你又把社區推到衝突前線，這會逼我站出來擋。", "居民要生活，不是每天替政治收尾。"],
+            watch: ["我看你下一步是不是還願意給社區台階。"]
+        },
+        "艾達議員": {
+            support: ["這能變成質詢題目，但你要把人證和文件補齊。", "你給我一個制度入口，我就能把它推進議會。"],
+            oppose: ["這樣進不了程序，只會被對手說成情緒勒索。", "我不能替沒有責任設計的口號背書。"],
+            watch: ["我等你把訴求整理成可以被審議的版本。"]
+        },
+        "威廉總裁": {
+            support: ["承認成本，我們才有談判空間。", "只要規則可預測，企業不是不能讓步。"],
+            oppose: ["你把成本講得像不存在，投資會先撤。", "如果今天用聲量改規則，明天就沒人敢負責。"],
+            watch: ["我先看你是談制度，還是只想找人付錢。"]
+        },
+        "莉亞記者": {
+            support: ["給我時間線，我會追到責任鏈完整為止。", "這次你沒有只給口號，我可以繼續查。"],
+            oppose: ["別把我當擴音器，我要的是證據。", "你避開的那一段，才是我要追的地方。"],
+            watch: ["我還不寫結論，先看誰的說法經得起查。"]
+        },
+        "龐頭目": {
+            support: ["有談判位置，我就能讓街頭先穩住。", "你把基層放進桌上，我的人會看見。"],
+            oppose: ["你又要我們等，等到最後什麼都沒有。", "沒有籌碼，就不要叫大家理性。"],
+            watch: ["我看的是痛苦有沒有換到位置。"]
+        },
+        "雷將軍": {
+            support: ["邊界清楚，我可以不升高管制。", "先穩住風險，安全系統才不用站到最前面。"],
+            oppose: ["你在拿失控賭政治收益，這我不能放。", "自由不能替安全破口背書。"],
+            watch: ["我先看這會不會被外部或極端者利用。"]
+        },
+        "費教授": {
+            support: ["你把責任與制度缺口分開了，討論才有品質。", "這至少讓長期成本被看見。"],
+            oppose: ["你把問題剪成口號，政策就無法被檢驗。", "情緒能動員，但不能替制度設計交卷。"],
+            watch: ["我先問證據在哪裡，然後才談價值。"]
+        },
+        "蘇網紅": {
+            support: ["這句話能剪出去，觀眾會懂。", "你給我一個清楚衝突點，聲量會自己跑。"],
+            oppose: ["你講得太完整，我反而能剪成另一個版本。", "這不夠尖，觀眾不會停下來。"],
+            watch: ["我先看哪一句會被轉發。"]
+        }
+    };
+
+    const fallback = {
+        support: [`這一步有碰到我的「${profile.interest}」，我可以先靠近。`],
+        oppose: [`你踩到我的「${profile.risk}」，我會開始反制。`],
+        watch: [`${effectLabel(key)}${effectDirection(value)}，我還在看局勢。`]
+    };
+    return pickLine(roleLines[name]?.[tone] || fallback[tone] || fallback.watch, seed);
+}
+
+function buildNpcExchange(reaction, effects, event = {}) {
     const [key, value] = strongestEffect(effects);
     const profile = roleProfile();
     const ally = profile.ally || "莉亞記者";
@@ -1539,9 +2822,9 @@ function buildNpcExchange(reaction, effects) {
         return {
             actor,
             other,
-            actorLine: `${effectLabel(key)}正在${effectDirection(value)}。`,
-            otherLine: "先看他的下一步。",
-            summary: `${actor}把你的選擇轉述給${other}，說這不是單一事件，而是你正在把${effectLabel(key)}推向${effectDirection(value)}。${other}沒有立刻表態，但開始要求你拿出更清楚的下一步。`
+            actorLine: npcDialogueLine(actor, "oppose", event, effects, "actor"),
+            otherLine: npcDialogueLine(other, "watch", event, effects, "other"),
+            summary: `${actor}把焦點放在「${npcInterestProfile(actor).risk}」，${other}則先觀望你能不能補上下一步。`
         };
     }
 
@@ -1549,18 +2832,18 @@ function buildNpcExchange(reaction, effects) {
         return {
             actor,
             other,
-            actorLine: "我可以幫他開門。",
-            otherLine: "別太快押寶。",
-            summary: `${actor}願意替你打開一扇門，但${other}提醒他別太快押寶。兩人真正爭的不是你本人，而是這件事能不能被納入正式流程。`
+            actorLine: npcDialogueLine(actor, "support", event, effects, "actor"),
+            otherLine: npcDialogueLine(other, "watch", event, effects, "other"),
+            summary: `${actor}願意給你一點空間，因為這一步碰到他的「${npcInterestProfile(actor).interest}」；${other}仍在等你證明這不是臨時表態。`
         };
     }
 
     return {
         actor,
         other,
-        actorLine: "我還不站隊。",
-        otherLine: "看他下一步。",
-        summary: `${actor}沒有站隊，只把消息轉給${other}。這代表局勢還沒定型，但下一次選擇會更難被當成偶然。`
+        actorLine: npcDialogueLine(actor, "watch", event, effects, "actor"),
+        otherLine: npcDialogueLine(other, "watch", event, effects, "other"),
+        summary: `${actor}沒有立刻站隊，只把消息轉給${other}。局勢還沒定型，但下一次選擇會更難被當成偶然。`
     };
 }
 
@@ -1576,11 +2859,11 @@ function renderSpeakerSpotlight(reaction) {
     `;
 }
 
-function renderInteractionDialogue(reaction, effects) {
-    const exchange = buildNpcExchange(reaction, effects);
+function renderInteractionDialogue(reaction, effects, event = {}, exchangeOverride = null) {
+    const exchange = exchangeOverride || buildNpcExchange(reaction, effects, event);
     return `
         <div class="interaction-card">
-            <b>人物互動</b>
+            <b>主要衝突</b>
             <div class="dialogue-pair">
                 <article>
                     ${renderAvatar(exchange.actor, "dialogue-avatar")}
@@ -1601,42 +2884,70 @@ function renderInteractionDialogue(reaction, effects) {
     `;
 }
 
+function stakeholderStanceLine(name = "", trust = 50, profile = {}, lens = {}, effects = {}) {
+    const [key, value] = strongestEffect(effects);
+    const seed = `${name}|stance|${lens.label}|${key}|${value}|${Math.round(trust / 10)}`;
+    if (trust >= 70) {
+        return pickLine([
+            `他會暫時把自己的「${profile.interest}」放進你的路線，替你爭取一點時間。`,
+            `他願意幫你擋下部分反彈，但會要求你下一步兌現「${profile.compromise}」。`,
+            `他把這次選擇視為合作訊號，開始替你連接自己的支持網絡。`
+        ], seed);
+    }
+    if (trust <= 30) {
+        return pickLine([
+            `他會從「${profile.risk}」放大你的破口，提醒旁觀者不要太快相信你。`,
+            `他把這次選擇記成警訊，準備在下一個議題上要求更高代價。`,
+            `他不只是反對你，而是擔心自己的底線「${profile.redLine}」被推倒。`
+        ], seed);
+    }
+    return pickLine([
+        `他還沒有站隊，只在看你會不會把「${profile.interest}」也放進成本表。`,
+        `他暫時保持距離，因為這一步還看不出誰要承擔後果。`,
+        `他把態度留到下一回合，等你證明這不是臨時表態。`
+    ], seed);
+}
+
 function socialReactionLine(name, event = {}, effects = {}, reaction = {}) {
     const lens = issueLens(event);
     const [key, value] = strongestEffect(effects);
     const trust = gameState.npcApprovals?.[name] ?? 50;
-    const stance = trust >= 70 ? "願意幫你把話傳出去" : trust <= 30 ? "準備把你的漏洞放大" : "還在等你下一步";
+    const profile = npcInterestProfile(name);
+    const stance = stakeholderStanceLine(name, trust, profile, lens, effects);
 
     if (name === reaction.npc) {
-        if (reaction.tone === "oppose") return "他把這次選擇記成你的政治弱點。";
-        if (reaction.tone === "support") return "他把這次選擇當成合作入口。";
-        return "他暫時不站隊，但已經開始觀察你的路線是否一致。";
+        if (reaction.tone === "oppose") return `${npcDialogueLine(name, "oppose", event, effects, "pulse")} ${stance}。`;
+        if (reaction.tone === "support") return `${npcDialogueLine(name, "support", event, effects, "pulse")} ${stance}。`;
+        return `${npcDialogueLine(name, "watch", event, effects, "pulse")} ${stance}。`;
     }
 
     const roleLines = {
-        "柯爾市長": value < 0 && key === "order" ? "市府會把焦點放在失控風險。" : "市府先計算這會不會傷到治理正當性。",
-        "莫長老": (effects.populism || 0) > 0 ? "社區群組開始擔心衝突進入日常。" : "他想知道你是不是願意給傳統社群台階。",
-        "艾達議員": (effects.progress || 0) > 0 ? "她看見把議題送進程序的機會。" : "她暫時找不到能進議會的切口。",
-        "威廉總裁": (effects.progress || 0) > 0 ? "他開始盤算改革會改變多少成本。" : "他會用穩定與就業說服觀望者。",
-        "莉亞記者": "她開始補時間線，準備追誰在改寫敘事。",
-        "龐頭目": (effects.order || 0) < 0 ? "他認為街頭籌碼變強了。" : "他擔心基層又被請回去等待。",
-        "雷將軍": lens.label === "安全焦慮" || (effects.order || 0) < 0 ? "他會把事件往安全問題定義。" : "他暫時按兵不動，但要求更清楚的邊界。",
+        "柯爾市長": value < 0 && key === "order" ? "市府會把焦點放在失控風險，避免治理正當性被拖垮。" : "市府先計算這會不會傷到執政正當性與責任分工。",
+        "莫長老": (effects.populism || 0) > 0 ? "社區群組開始擔心衝突進入日常生活。" : "他想知道你是不是願意給傳統社群台階。",
+        "艾達議員": (effects.progress || 0) > 0 ? "她看見把議題送進程序的機會，開始找質詢切口。" : "她暫時找不到能進議會的版本。",
+        "威廉總裁": (effects.progress || 0) > 0 ? "他開始盤算改革會改變多少成本與投資預期。" : "他會用穩定與就業說服觀望者。",
+        "莉亞記者": "她開始補時間線，準備追誰在改寫敘事、誰在迴避責任。",
+        "龐頭目": (effects.order || 0) < 0 ? "他認為街頭籌碼變強了，可以要求談判位置。" : "他擔心基層又被請回去等待。",
+        "雷將軍": lens.label === "安全焦慮" || (effects.order || 0) < 0 ? "他會把事件往安全問題定義，要求明確邊界。" : "他暫時按兵不動，但要求更清楚的風險控管。",
         "費教授": (effects.populism || 0) > 0 ? "他會公開拆解情緒動員的代價。" : "他要求把討論拉回證據與制度設計。",
-        "蘇網紅": (effects.populism || 0) > 0 ? "他找到可剪輯的衝突點。" : "他覺得這一幕聲量還不夠尖銳。"
+        "蘇網紅": (effects.populism || 0) > 0 ? "他找到可剪輯的衝突點，準備讓事件變短、變尖。" : "他覺得這一幕聲量還不夠尖銳。"
     };
 
-    return `${roleLines[name] || "他重新計算自己在這個議題的位置。"} ${stance}。`;
+    const lensLine = pickLine(lensSpecificVoice(name, lens.label, eventText(event)) || [], `${name}|pulse|${lens.label}|${event.title}`);
+    return `${lensLine || roleLines[name] || "他重新計算自己在這個議題的位置。"} ${stance}。`;
 }
 
-function renderSocietyPulse(event = {}, effects = {}, reaction = {}) {
+function renderSocietyPulse(event = {}, effects = {}, reaction = {}, excludeNames = []) {
+    const excluded = new Set(excludeNames.filter(Boolean));
     const names = involvedCharactersForEvent(event, reaction)
         .filter((name) => name !== gameState.character?.name)
+        .filter((name) => !excluded.has(name))
         .slice(0, 4);
     if (!names.length) return "";
 
     return `
         <div class="society-pulse">
-            <b>小社會正在運作</b>
+            <b>其他人的反應</b>
             ${names.map((name) => `
                 <article>
                     ${renderAvatar(name, "pulse-avatar")}
@@ -1652,7 +2963,7 @@ function renderSocietyPulse(event = {}, effects = {}, reaction = {}) {
 function buildPlainDecisionRead(option, ev, effects, reaction) {
     const [key, value] = strongestEffect(effects);
     const first = value === 0
-        ? "局勢沒有立刻翻盤。"
+        ? "局勢暫時沒有大變化。"
         : `${effectLabel(key)}${effectDirection(value)}。`;
 
     const second = reaction.tone === "oppose"
@@ -1680,19 +2991,19 @@ function buildPlainDecisionRead(option, ev, effects, reaction) {
 function buildOptionAnalysis(option, ev, effects, pOption, reaction) {
     const [key, value] = strongestEffect(effects);
     const frame = {
-        freedom: value > 0 ? "你把事件定義成「誰有權發聲」的問題。" : "你把事件暫時放回低衝突的處理方式。",
-        order: value > 0 ? "你優先處理現場穩定與可控性。" : "你接受較高的現場壓力，換取議題被看見。",
-        progress: value > 0 ? "你把訴求往制度流程推進。" : "你讓事件先停在政治交換或觀望階段。",
-        populism: value > 0 ? "你選擇放大情緒與注意力，讓事件更難被忽視。" : "你選擇降溫，避免事件被情緒綁架。",
-        balance: "你沒有明顯推高單一指標，而是讓各方繼續觀望。"
+        freedom: value > 0 ? "讓更多人公開說話。" : "先把衝突壓低。",
+        order: value > 0 ? "先穩住場面。" : "讓壓力留在現場。",
+        progress: value > 0 ? "把訴求送進制度。" : "先不要推改革。",
+        populism: value > 0 ? "放大聲量。" : "讓情緒降溫。",
+        balance: "先保留空間。"
     }[key];
 
     const tradeoff = {
-        freedom: value > 0 ? "代價是保守派會更警戒，秩序派也會要求邊界。" : "代價是支持者可能覺得你沒有站出來。",
-        order: value > 0 ? "代價是街頭支持者可能把這看成退讓。" : "代價是反對者更容易用失序來攻擊你。",
-        progress: value > 0 ? "代價是你必須找到願意承擔責任的人，否則流程會變成空話。" : "代價是改革動能會被舊流程吸收。",
-        populism: value > 0 ? "代價是敘事會被二創、剪輯或反向利用。" : "代價是議題聲量下降後，媒體可能轉向下一個事件。",
-        balance: "代價是你暫時保留空間，但也沒有讓任何陣營真正放心。"
+        freedom: value > 0 ? "怕失序的人會更緊張。" : "支持者可能覺得你退縮。",
+        order: value > 0 ? "街頭會覺得力道變小。" : "反對者會說你製造混亂。",
+        progress: value > 0 ? "接下來要有人負責執行。" : "改革會變慢。",
+        populism: value > 0 ? "聲量可能反過來傷到你。" : "議題可能很快被忘記。",
+        balance: "大家都還不放心。"
     }[key];
 
     const socialRead = reaction.tone === "oppose"
@@ -1702,22 +3013,22 @@ function buildOptionAnalysis(option, ev, effects, pOption, reaction) {
             : `${reaction.npc}還沒有下判斷，但會繼續觀察你是否一致。`;
 
     const persuasionRead = pOption
-        ? `<small>說服段落：你不是只選政策，也選擇了面對衝突的語氣與關係成本。</small>`
+        ? `<small>說服也會留下關係成本。</small>`
         : "";
 
     return `
         <div class="option-analysis">
             <b>選項剖析</b>
             <article>
-                <span>你剛才真正選的是</span>
+                <span>你做了什麼</span>
                 <strong>${escapeHTML(frame)}</strong>
             </article>
             <article>
-                <span>它帶來的取捨</span>
+                <span>代價</span>
                 <strong>${escapeHTML(tradeoff)}</strong>
             </article>
             <article>
-                <span>角色會怎麼讀你</span>
+                <span>別人怎麼看</span>
                 <strong>${escapeHTML(socialRead)}</strong>
             </article>
             ${persuasionRead}
@@ -1728,28 +3039,28 @@ function politicalCostReflection(ev, option, effects, reaction) {
     const [key, value] = strongestEffect(effects);
     const lens = issueLens(ev);
     const beneficiaries = {
-        freedom: value > 0 ? "原本難以發聲的人得到更多公共空間" : "需要穩定處理的人暫時少了外部壓力",
-        order: value > 0 ? "秩序派與行政系統得到喘息" : "街頭與抗議者得到更強的談判壓力",
-        progress: value > 0 ? "改革派得到制度入口" : "保守或觀望陣營得到拖延空間",
-        populism: value > 0 ? "擅長動員與傳播的人得到舞台" : "想降溫與查證的人得到空間",
-        balance: "各方暫時都沒有輸到必須翻桌"
+        freedom: value > 0 ? "想說話的人" : "想先降溫的人",
+        order: value > 0 ? "需要穩定的人" : "街頭抗議者",
+        progress: value > 0 ? "改革派" : "想拖慢改革的人",
+        populism: value > 0 ? "擅長動員的人" : "想查證的人",
+        balance: "觀望的人"
     }[key];
     const payers = {
-        freedom: value > 0 ? "害怕失序的人承擔焦慮" : "等待被聽見的人承擔沉默",
-        order: value > 0 ? "街頭訴求承擔被稀釋的風險" : "一般民眾與行政系統承擔混亂成本",
-        progress: value > 0 ? "掌權者與既得利益者承擔制度改變成本" : "改革支持者承擔失望與疲乏",
-        populism: value > 0 ? "被簡化或被貼標籤的人承擔誤讀" : "需要聲量的人承擔被忽視",
-        balance: "未被明確處理的人繼續等待"
+        freedom: value > 0 ? "害怕失序的人" : "等著被聽見的人",
+        order: value > 0 ? "街頭訴求" : "一般民眾與第一線人員",
+        progress: value > 0 ? "既有利益者" : "改革支持者",
+        populism: value > 0 ? "被簡化的人" : "需要聲量的人",
+        balance: "還沒被處理的人"
     }[key];
     const question = {
-        "生計壓力": "如果你是被要求承擔成本的那一方，你還會覺得這個選擇公平嗎？",
-        "世代衝突": "你剛才保護的是改變的速度，還是社群的安全感？",
-        "資訊戰": "你願意為了降低傷害，讓誰有權決定哪些話可以被說？",
-        "發展代價": "當改革看起來正確時，你有沒有看見被轉嫁成本的人？",
-        "安全焦慮": "安全感增加時，誰的自由被放到比較後面？",
-        "價值衝突": "你選擇的是說服對方，還是讓一方先退場？",
-        "信任危機": "你的選擇是在修復信任，還是在利用不信任？"
-    }[lens.label] || "這個選擇讓誰得到政治空間，又讓誰承擔代價？";
+        "生計壓力": "這個成本應該由誰付？",
+        "世代衝突": "你保護的是改變，還是安全感？",
+        "資訊戰": "誰可以決定哪些話不能說？",
+        "發展代價": "誰替發展付代價？",
+        "安全焦慮": "為了安全，誰少了自由？",
+        "價值衝突": "你是在說服，還是在讓一方退場？",
+        "信任危機": "你是在修復信任，還是在利用不信任？"
+    }[lens.label] || "誰得到好處？誰付代價？";
 
     return {
         lens: lens.label,
@@ -1775,7 +3086,7 @@ function recordReflection(ev, option, effects, reaction) {
 function renderReflectionPanel(reflection) {
     return `
         <div class="reflection-panel">
-            <b>政治代價反思</b>
+            <b>這一步留下什麼</b>
             <article>
                 <span>誰得到空間</span>
                 <strong>${escapeHTML(reflection.beneficiary)}</strong>
@@ -1787,6 +3098,63 @@ function renderReflectionPanel(reflection) {
             <article class="question">
                 <span>留給玩家的問題</span>
                 <strong>${escapeHTML(reflection.question)}</strong>
+            </article>
+        </div>`;
+}
+
+function resultImmediateLine(effects = {}) {
+    const [key, value] = strongestEffect(effects);
+    if (value === 0) return "局勢沒有大幅移動，但每個人都在重新估算你的立場。";
+    const lines = {
+        freedom: value > 0 ? "更多人敢把話說出口。" : "公開討論變少，不滿轉進私下。",
+        order: value > 0 ? "現場暫時可控，但訴求被放慢。" : "壓力留在現場，失控風險升高。",
+        progress: value > 0 ? "訴求被送進制度，接下來要有人簽字負責。" : "改革窗口變窄，舊流程重新取得主導。",
+        populism: value > 0 ? "聲量快速升高，也更容易被剪輯和誤讀。" : "情緒降下來，但議題可能跟著失去能見度。"
+    };
+    return lines[key] || "場上籌碼重新分配。";
+}
+
+function resultCostLine(effects = {}, reaction = {}) {
+    const [key, value] = strongestEffect(effects);
+    const lines = {
+        freedom: value > 0 ? "秩序派和害怕失控的人會承擔壓力。" : "等著被聽見的人會覺得自己又被壓下去。",
+        order: value > 0 ? "街頭和改革派會懷疑你退讓。" : "一般民眾、第一線人員和市府都要承擔混亂成本。",
+        progress: value > 0 ? "既有利益者被迫讓出空間。" : "改革支持者付出時間和信任成本。",
+        populism: value > 0 ? "複雜的人被簡化成敵我。" : "需要聲量的人可能又回到沉默。"
+    };
+    const base = lines[key] || "還沒被處理的人繼續付代價。";
+    if (reaction?.tone === "oppose") return `${base} ${reaction.npc}會把這筆帳記在你身上。`;
+    if (reaction?.tone === "support") return `${base} ${reaction.npc}願意暫時幫你分擔一點風險。`;
+    return base;
+}
+
+function resultNextStepLine(effects = {}, reaction = {}, beat = {}) {
+    if ((effects.progress || 0) > 0) return "下一步要把承諾變成文件、會議或可追蹤的責任。";
+    if ((effects.populism || 0) > 0) return "下一步要避免聲量替你做出你沒準備好的承諾。";
+    if ((effects.order || 0) < 0) return "下一步要處理現場風險，否則安全派會接管敘事。";
+    if ((effects.freedom || 0) < 0) return "下一步要回應被壓下去的聲音，否則沉默會變成不信任。";
+    if (reaction?.tone === "oppose") return `${reaction.npc}已經成為下一個阻力，你需要決定修補或對抗。`;
+    return beat?.next ? beat.next.replace("下一幕：", "下一步：") : "下一步要讓選擇不只停在表態。";
+}
+
+function renderConsequenceFlow(option, ev, effects, reaction, beat) {
+    return `
+        <div class="consequence-flow">
+            <article>
+                <span>你的動作</span>
+                <b>${escapeHTML(compactText(polishNarrativeText(option.text), 36))}</b>
+            </article>
+            <article>
+                <span>立刻發生</span>
+                <b>${escapeHTML(resultImmediateLine(effects))}</b>
+            </article>
+            <article>
+                <span>誰付代價</span>
+                <b>${escapeHTML(resultCostLine(effects, reaction))}</b>
+            </article>
+            <article>
+                <span>接下來</span>
+                <b>${escapeHTML(resultNextStepLine(effects, reaction, beat))}</b>
             </article>
         </div>`;
 }
@@ -1811,21 +3179,22 @@ function buildOutcomeReport(option, ev, effects, pOption, reaction, beat) {
                 : "下一步決定走向。";
 
     const reflection = recordReflection(ev, option, effects, reaction);
+    const exchange = buildNpcExchange(reaction, effects, ev);
 
     return `
         ${renderSpeakerSpotlight(reaction)}
+        ${renderConsequenceFlow(option, ev, effects, reaction, beat)}
         <div class="impact-row">
             <span>${escapeHTML(effectToken(effects))}</span>
             <span>${escapeHTML(shortTerm)}</span>
             <span>${escapeHTML(hook)}</span>
         </div>
-        ${renderSceneBeat(beat, reaction)}
-        ${renderInteractionDialogue(reaction, effects)}
-        ${renderSocietyPulse(ev, effects, reaction)}
         ${buildOptionAnalysis(option, ev, effects, pOption, reaction)}
+        ${renderInteractionDialogue(reaction, effects, ev, exchange)}
+        ${renderSocietyPulse(ev, effects, reaction, [exchange.actor, exchange.other])}
         ${renderArcChanges()}
         ${renderReflectionPanel(reflection)}
-        ${pOption ? `<div class="pressure-note danger">說服留下記憶。</div>` : ""}
+        ${pOption ? `<div class="pressure-note danger">這次說服會影響之後關係。</div>` : ""}
     `;
 }
 
@@ -2021,15 +3390,100 @@ function buildPoliticalStanceSummary() {
 
 function buildPoliticalReflectionSummary() {
     if (!gameState.reflectionLog.length) return "";
+    const unique = [];
+    gameState.reflectionLog.slice().reverse().forEach((item) => {
+        const key = `${item.beneficiary}|${item.payer}|${item.question}`;
+        if (!unique.some((existing) => existing.key === key)) {
+            unique.push({ key, item });
+        }
+    });
+    const picked = unique.slice(0, 3).map(({ item }) => item).reverse();
     return `
         <div class="political-reflection-list">
-            <b>你的選擇反覆呈現的政治代價</b>
-            ${gameState.reflectionLog.slice(-2).map((item) => `
+            <b>這局反覆出現的政治代價</b>
+            ${picked.map((item) => `
                 <article>
                     <span>${escapeHTML(compactText(item.eventTitle, 22))}</span>
                     <small>讓 ${escapeHTML(item.beneficiary)}；也讓 ${escapeHTML(item.payer)}。</small>
                 </article>
             `).join("")}
+        </div>`;
+}
+
+function topHistoryValue(history = [], key = "lens", fallback = "多重議題") {
+    const counts = history.reduce((acc, item) => {
+        const value = item[key] || fallback;
+        acc[value] = (acc[value] || 0) + 1;
+        return acc;
+    }, {});
+    return Object.entries(counts).sort((a, b) => b[1] - a[1])[0]?.[0] || fallback;
+}
+
+function finalSocialConsequence(stats = gameState.stats) {
+    const { freedom, order, progress, populism } = stats;
+    if (populism >= 65 && order < 55) return "議題被看見了，但社會也更習慣用敵我和聲量判斷政治。";
+    if (order >= 65 && freedom < 50) return "場面被穩住了，但一部分異議轉到私下累積，信任沒有真正修復。";
+    if (progress >= 65 && freedom >= 55) return "改革有入口，公共討論也留下紀錄，但後續仍要有人承擔財源與責任。";
+    if (progress <= 45) return "許多承諾停在協調與安撫，支持者會開始懷疑制度是否真的會動。";
+    if (freedom >= 65 && order <= 45) return "更多人敢說話，卻也讓第一線承受更高混亂成本。";
+    return "社會沒有被單一陣營完全拿走，但每個選擇留下的成本仍會回到下一輪政治。";
+}
+
+function buildFinalSynthesis(archetype = politicalArchetype()) {
+    const { freedom, order, progress, populism } = gameState.stats;
+    const history = gameState.choiceHistory || [];
+    const lastChoices = history.slice(-3);
+    const openingChoice = history[0];
+    const closingChoice = history[history.length - 1];
+    const repeatedLens = topHistoryValue(history, "lens", "多重議題");
+    const repeatedEffect = topHistoryValue(history, "effect", "沒有固定方向");
+    const strongestStat = Object.entries(gameState.stats)
+        .sort((a, b) => b[1] - a[1])[0] || ["balance", 50];
+    const weakestStat = Object.entries(gameState.stats)
+        .sort((a, b) => a[1] - b[1])[0] || ["balance", 50];
+    const direction = [];
+    if (progress >= 60) direction.push("把議題推進制度");
+    if (freedom >= 60) direction.push("打開公共發聲");
+    if (order >= 60) direction.push("維持可控秩序");
+    if (populism >= 60) direction.push("使用聲量施壓");
+    if (!direction.length) direction.push("在多方壓力間保留彈性");
+
+    const tradeoffs = [];
+    if (populism >= 60) tradeoffs.push("對立和誤讀變得更容易擴散");
+    if (order <= 45) tradeoffs.push("秩序成本被推給第一線和一般民眾");
+    if (freedom <= 45) tradeoffs.push("部分聲音被壓低，只是沒有消失");
+    if (progress <= 45) tradeoffs.push("改革支持者會覺得承諾沒有落地");
+    if (!tradeoffs.length) tradeoffs.push("每一方都得到一點空間，也都沒有完全滿意");
+
+    const finalTopic = lastChoices[lastChoices.length - 1]?.eventTitle || "最後議題";
+    const closure = progress >= 60 && order >= 50
+        ? `最後，${finalTopic}沒有靠單一勝利收場，而是被推進可追蹤的改革入口。`
+        : populism >= 65 && order < 55
+            ? `最後，${finalTopic}被推上檯面，但制度還沒有足夠能力把衝突收回來。`
+            : order >= 65 && freedom < 50
+                ? `最後，${finalTopic}暫時被穩住，但部分異議退到私下，成為下一輪不信任。`
+                : `最後，${finalTopic}沒有被完全解決，但玩家留下了一條可被檢視、也會被追問的政治路線。`;
+
+    return `
+        <div class="final-synthesis">
+            <span>總結判讀</span>
+            <h4>${escapeHTML(archetype)}</h4>
+            <p>你的主要路線是：${escapeHTML(direction.join("、"))}。最高指標是「${escapeHTML(effectLabel(strongestStat[0]))} ${Math.round(strongestStat[1])}」，最低指標是「${escapeHTML(effectLabel(weakestStat[0]))} ${Math.round(weakestStat[1])}」。</p>
+            <p>整局最常被你推到前面的議題是「${escapeHTML(repeatedLens)}」，最常出現的政治效果是「${escapeHTML(repeatedEffect)}」。這代表你的路線不是隨機反應，而是在反覆選擇同一種政治代價。</p>
+            ${openingChoice && closingChoice ? `<p>開局你用「${escapeHTML(compactText(openingChoice.choiceText, 28))}」建立位置；收尾你用「${escapeHTML(compactText(closingChoice.choiceText, 28))}」決定社會最後承受哪一種壓力。</p>` : ""}
+            ${lastChoices.length ? `
+                <div class="final-turning-points">
+                    <b>最後三個關鍵選擇</b>
+                    ${lastChoices.map((choice) => `
+                        <article>
+                            <span>${escapeHTML(compactText(choice.eventTitle, 20))}</span>
+                            <small>${escapeHTML(compactText(choice.choiceText, 34))} / ${escapeHTML(choice.effect)}</small>
+                        </article>
+                    `).join("")}
+                </div>` : ""}
+            <p>具體代價是：${escapeHTML(tradeoffs.join("；"))}。</p>
+            <p>社會後果是：${escapeHTML(finalSocialConsequence(gameState.stats))}</p>
+            <b>${escapeHTML(closure)}</b>
         </div>`;
 }
 
@@ -2052,6 +3506,7 @@ function buildPersonalityAnalysis() {
                 <b>${escapeHTML(archetype)}</b>
                 <span>這不是人格診斷，而是你在這局遊戲中用選擇留下的政治位置。</span>
             </div>
+            ${buildFinalSynthesis(archetype)}
             ${buildPoliticalStanceSummary()}
             <div class="spectrum-panel">
                 ${buildPoliticalAxisRows()}
@@ -2126,6 +3581,7 @@ const els = {
     
     endScreen: document.getElementById('end-screen'),
     endText: document.getElementById('end-text'),
+    restartBtn: document.getElementById('restart-btn'),
     
     networkModal: document.getElementById('network-modal'),
     toggleNetworkBtn: document.getElementById('toggle-network'),
@@ -2159,6 +3615,28 @@ const els = {
     btnPersuadeLow: document.getElementById('btn-persuade-low')
 };
 
+function resetModalScroll(modal) {
+    if (!modal) return;
+    const content = modal.querySelector?.('.modal-content');
+    modal.scrollTop = 0;
+    if (content) content.scrollTop = 0;
+    const defer = typeof requestAnimationFrame === "function" ? requestAnimationFrame : (callback) => setTimeout(callback, 0);
+    defer(() => {
+        modal.scrollTop = 0;
+        if (content) content.scrollTop = 0;
+    });
+}
+
+function openModal(modal) {
+    if (!modal) return;
+    modal.classList.remove('hidden');
+    resetModalScroll(modal);
+}
+
+function restartGame() {
+    location.reload();
+}
+
 // 初始化事件監聽
 els.startBtn.addEventListener('click', startGame);
 els.introNextBtn.addEventListener('click', handleIntroNext);
@@ -2182,9 +3660,10 @@ els.closeNewsModalBtn?.addEventListener('click', (event) => {
     event.stopPropagation();
     nextTurn();
 });
-els.toggleNetworkBtn.addEventListener('click', () => els.networkModal.classList.remove('hidden'));
+els.toggleNetworkBtn.addEventListener('click', () => openModal(els.networkModal));
 els.closeNetworkBtn.addEventListener('click', () => els.networkModal.classList.add('hidden'));
 els.closeDetailBtn.addEventListener('click', () => els.detailModal.classList.add('hidden'));
+els.restartBtn?.addEventListener('click', restartGame);
 
 // 固定地圖座標 (百分比)，避免跑出邊界，並與區域對應
 // 對應角色順序：市長, 長老, 議員, 總裁, 記者, 頭目, 將軍, 網紅, 教授, 公務員, 學生, 企業主
@@ -2278,17 +3757,22 @@ function showDetailModal(title, desc, imgSrc, relationships, stances, imageFileN
     }
     
     const arc = gameState.characterArcs?.[title] || null;
-    if (relationships || stances || arc) {
+    const hasCharacterStance = Boolean(arc || characterByName(title) || Object.prototype.hasOwnProperty.call(gameState.npcApprovals || {}, title));
+    const profile = hasCharacterStance ? npcInterestProfile(title) : null;
+    const profileText = profile
+        ? `政治立場：${profile.stance}\n核心利益：${profile.interest}\n紅線：${profile.redLine}\n可妥協條件：${profile.compromise}`
+        : (stances || "中立。");
+    if (relationships || stances || arc || profile) {
         els.detailExtra.style.display = 'block';
         els.detailRelationships.innerText = relationships || arc?.goal || "無特別關聯。";
         els.detailStances.innerText = arc
-            ? `${stances || "中立。"}\n\n角色主線：${arc.goal}\n目前狀態：${arcStatusText(arc)}\n最近變化：${arc.lastChange}`
-            : (stances || "中立。");
+            ? `${profileText}\n\n角色主線：${arc.goal}\n目前狀態：${arcStatusText(arc)}\n最近變化：${arc.lastChange}`
+            : profileText;
     } else {
         els.detailExtra.style.display = 'none';
     }
     
-    els.detailModal.classList.remove('hidden');
+    openModal(els.detailModal);
 }
 
 function renderNetwork() {
@@ -2379,7 +3863,7 @@ async function startGame() {
         }
         return true;
     }));
-    const newsEvents = gameState.events.filter(e => e.is_news).sort(() => 0.5 - Math.random());
+    const newsEvents = smoothStoryEvents(gameState.events.filter(e => e.is_news));
     
     // 將新聞平均插入正常事件之間
     let mixedEvents = [];
@@ -2394,7 +3878,7 @@ async function startGame() {
     while(newsEvents.length > 0) {
         mixedEvents.push(newsEvents.pop());
     }
-    gameState.events = mixedEvents;
+    gameState.events = applyStoryDirector(mixedEvents);
     
     // 渲染專屬屬性面板
     if (gameState.character.personal_stats && Object.keys(gameState.character.personal_stats).length > 0) {
@@ -2425,7 +3909,7 @@ async function startGame() {
 let introStep = 0;
 function startIntroSequence() {
     introStep = 0;
-    els.introModal.classList.remove('hidden');
+    openModal(els.introModal);
     handleIntroNext();
 }
 
@@ -2461,6 +3945,7 @@ function handleIntroNext() {
         els.triggerEventBtn.classList.remove('hidden');
     }
     hydrateDynamicImages(els.introDesc);
+    resetModalScroll(els.introModal);
 }
 
 function updateStatsUI() {
@@ -2597,7 +4082,7 @@ function showPersuasionModal(config) {
     els.btnPersuadeHigh.onclick = () => handlePersuasion(true);
     els.btnPersuadeLow.onclick = () => handlePersuasion(false);
     
-    els.persuasionModal.classList.remove('hidden');
+    openModal(els.persuasionModal);
 }
 
 function handlePersuasion(isHigh) {
@@ -2627,10 +4112,8 @@ function updateNPCApprovalsBasedOnEffects(effects, pTarget, isPHigh) {
     // 說服目標的直接好感度影響
     if (pTarget && gameState.npcApprovals[pTarget] !== undefined) {
         if (isPHigh) {
-            // 高說服力成功安撫，好感度小降或不降
-            gameState.npcApprovals[pTarget] -= 5;
+            gameState.npcApprovals[pTarget] += 4;
         } else {
-            // 低說服力談判破裂，好感度大降
             gameState.npcApprovals[pTarget] -= 25;
         }
     }
@@ -2639,11 +4122,15 @@ function updateNPCApprovalsBasedOnEffects(effects, pTarget, isPHigh) {
 function eventText(event = {}, option = {}, pOption = null) {
     return [
         event.title,
+        event.original_title,
         event.description,
+        event.original_description,
         event.image_filename,
         event.relationship_effects_text,
         option.text,
+        option.original_text,
         option.result_text,
+        option.original_result_text,
         pOption?.text,
         pOption?.result_text
     ].filter(Boolean).join(" ").toLowerCase();
@@ -2768,15 +4255,15 @@ function determineEnding() {
     if (populism >= 80 && order <= 30) {
         return {
             key: "anarchy",
-            title: "無政府暴動",
-            line: "街頭成為唯一有效的政治語言，制度失去仲裁能力。"
+            title: "制度失靈與街頭失控",
+            line: "這不是突然變成無政府，而是前面多次選擇讓聲量變強、秩序變弱，最後制度失去仲裁能力。"
         };
     }
     if (order >= 80 && freedom <= 30) {
         return {
             key: "authoritarian",
             title: "新威權時代",
-            line: "社會換到穩定，卻把異議與查證能力一起壓低。"
+            line: "社會換到穩定，但異議、查證與少數立場也一起被壓低。"
         };
     }
     if (freedom >= 70 && progress >= 70 && order >= 50) {
@@ -2790,7 +4277,7 @@ function determineEnding() {
         return {
             key: "populistOrder",
             title: "多數意志的高壓秩序",
-            line: "秩序被保住，但它依靠的是群眾情緒與排除不同聲音。"
+            line: "秩序被保住，但主要靠多數情緒施壓，不同聲音很難留下。"
         };
     }
     return {
@@ -2804,25 +4291,39 @@ function endingCauseItems(result) {
     const { freedom, order, progress, populism } = gameState.stats;
     const items = [];
 
-    if (populism >= 70) items.push("情緒動員長期偏高，公共討論容易被簡化成站隊。");
-    if (order <= 35) items.push("秩序治理偏低，讓反對者更容易把制度描述成失效。");
-    if (order >= 70) items.push("你多次選擇讓局勢可控，代價是部分訴求被延後處理。");
-    if (freedom <= 35) items.push("公共發聲空間被壓縮，沉默的人不代表真的被說服。");
-    if (freedom >= 65) items.push("你打開更多發聲空間，也讓衝突更難被行政命令快速收束。");
-    if (progress >= 65) items.push("改革被推進，但每一步都要求有人承擔實際成本。");
-    if (progress <= 40) items.push("改革多次退回舊流程，支持者開始懷疑制度能不能回應。");
+    if (populism >= 70) items.push("你常用聲量推動事情，所以對立變強。");
+    if (order <= 35) items.push("秩序太低，大家開始覺得制度管不住局面。");
+    if (order >= 70) items.push("你常先穩住場面，但有些訴求被延後。");
+    if (freedom <= 35) items.push("發聲空間太小，很多不滿只是不說出口。");
+    if (freedom >= 65) items.push("更多人能說話，但衝突也更難收束。");
+    if (progress >= 65) items.push("改革往前走了，但需要有人承擔成本。");
+    if (progress <= 40) items.push("改革太慢，支持者開始失望。");
 
     if (result.key === "anarchy") {
-        items.unshift("這不是突然變成無政府，而是聲量能推動事件、制度卻無法收束事件的累積結果。");
+        items.unshift("這不是突然失控，而是聲量一直升高、制度卻收不回來。");
     }
     if (result.key === "authoritarian") {
-        items.unshift("這不是單純變穩定，而是人民在恐懼中接受了更強控制。");
+        items.unshift("社會變穩了，但代價是更多控制。");
     }
     if (result.key === "progressive") {
-        items.unshift("這個結果來自你讓衝突被看見，同時還保留制度處理能力。");
+        items.unshift("你讓問題被看見，也保住了處理問題的制度。");
     }
 
     return [...new Set(items)].slice(0, 4);
+}
+
+function endingAccountabilityLine(result) {
+    const strongest = Object.entries(gameState.stats).sort((a, b) => b[1] - a[1])[0] || ["balance", 50];
+    const weakest = Object.entries(gameState.stats).sort((a, b) => a[1] - b[1])[0] || ["balance", 50];
+    const base = `你的「${effectLabel(strongest[0])}」最高，「${effectLabel(weakest[0])}」最低，所以結局不是突然跳出來，而是一路累積出來。`;
+    const costs = {
+        anarchy: "最後付出代價的是第一線、一般民眾，以及原本只想被好好處理的受影響者。",
+        authoritarian: "最後付出代價的是公共發聲空間，許多反對意見被換成表面穩定。",
+        progressive: "最後付出代價的是願意承擔改革成本的人，因為制度往前走也需要財源、時間與責任人。",
+        populistOrder: "最後付出代價的是少數聲音和複雜討論，因為多數情緒成了最容易動員的工具。",
+        democraticMud: "最後付出代價的是信任本身，因為每一方都得到一點，卻也都覺得自己被拖欠。"
+    };
+    return `${base}${costs[result.key] || costs.democraticMud}`;
 }
 
 function buildEndingNarrative(result) {
@@ -2833,15 +4334,19 @@ function buildEndingNarrative(result) {
         <section class="ending-report ${escapeHTML(result.key)}">
             <h3>結局：${escapeHTML(result.title)}</h3>
             <p>${escapeHTML(result.line)}</p>
+            <div class="ending-verdict">
+                <b>這個結局怎麼來的</b>
+                <span>${escapeHTML(endingAccountabilityLine(result))}</span>
+            </div>
             <div class="ending-causes">
-                <b>為什麼會走到這裡</b>
+                <b>原因</b>
                 ${causes.map((cause) => `<span>${escapeHTML(cause)}</span>`).join("")}
             </div>
             ${lastChoices.length ? `
                 <div class="ending-trail">
-                    <b>最後留下的兩個痕跡</b>
+                    <b>壓成結局的最後兩步</b>
                     ${lastChoices.map((choice) => `
-                        <small>${escapeHTML(compactText(choice.eventTitle, 24))}：${escapeHTML(choice.effect)}</small>
+                        <small>${escapeHTML(compactText(choice.eventTitle, 22))}：${escapeHTML(compactText(choice.choiceText, 30))}，造成${escapeHTML(choice.effect)}</small>
                     `).join("")}
                 </div>` : ""}
         </section>`;
@@ -2852,7 +4357,7 @@ async function endGame() {
     const endingResult = determineEnding();
     els.endText.innerHTML = `${buildEndingNarrative(endingResult)}${buildRelationshipClosureReport()}${buildPersonalityAnalysis()}`;
     hydrateDynamicImages(els.endText);
-    els.endScreen.classList.remove('hidden');
+    openModal(els.endScreen);
     
     // 送出數據到後端
     try {
@@ -2949,24 +4454,24 @@ function buildAgencyExplanation(option, ev, effects) {
     const candidates = [];
     if ((effects.progress || 0) > 0) {
         candidates.push({
-            title: "制度化",
-            body: "口號開始變成流程。"
+            title: "進入流程",
+            body: "訴求開始有人處理。"
         });
         candidates.push({
-            title: "政策企業家",
-            body: "你幫議題找到入口。"
+            title: "找到入口",
+            body: "事情不只停在抗議。"
         });
     }
     if ((effects.freedom || 0) > 0) {
         candidates.push({
-            title: "框架設定",
-            body: "你改變大家怎麼描述問題。"
+            title: "更多人發聲",
+            body: "原本沉默的人站出來了。"
         });
     }
     if ((effects.order || 0) > 0) {
         candidates.push({
-            title: "政治機會結構",
-            body: "場面穩住，談判才有門。"
+            title: "場面穩住",
+            body: "大家比較願意談。"
         });
     }
     if ((effects.populism || 0) > 0 || (effects.order || 0) < 0) {
@@ -2989,14 +4494,14 @@ function buildAgencyExplanation(option, ev, effects) {
     }
     if ((effects.progress || 0) < 0) {
         candidates.push({
-            title: "路徑依賴",
-            body: "回到舊流程，就更難推。"
+            title: "回到舊路",
+            body: "改革變慢了。"
         });
     }
 
     candidates.push({
-        title: "議程設定",
-        body: `${effectLabel(mainKey)}${effectDirection(mainValue)}，追問方向改變。`
+        title: "焦點改變",
+        body: `${effectLabel(mainKey)}${effectDirection(mainValue)}。`
     });
 
     const picked = candidates[hashText(`${ev.title}${option.text}${gameState.currentEventIndex}`) % candidates.length];
@@ -3051,7 +4556,7 @@ function showEvent() {
         els.eventTitle.style.color = "var(--text-main)";
     }
 
-    els.eventModal.classList.remove('hidden');
+    openModal(els.eventModal);
     updateProgressBar();
 }
 
@@ -3114,7 +4619,7 @@ function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh =
 
     updateNPCApprovalsBasedOnEffects(effects, pTarget, isPHigh);
     applyContextualNpcDeltas(ev, option, effects, pOption);
-    const reaction = buildNpcReaction(beforeApprovals, effects, pTarget, isPHigh);
+    const reaction = buildNpcReaction(beforeApprovals, effects, pTarget, isPHigh, ev);
     const beat = sceneBeat(effects, reaction);
     gameState.lastOutcome = reaction;
     gameState.nextHook = beat.next;
@@ -3149,8 +4654,6 @@ function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh =
             newsHTML += `<div class="pressure-note danger"><strong>說服</strong> ${escapeHTML(compactText(pOption.result_text, 42))}</div>`;
         }
 
-        newsHTML += buildPlainDecisionRead(option, ev, effects, reaction);
-        newsHTML += buildAgencyExplanation(option, ev, effects);
     }
 
     els.newsText.innerHTML = newsHTML;
@@ -3162,5 +4665,5 @@ function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh =
     }
 
     els.nextTurnBtn.innerText = beat.next || "確認";
-    els.newsFlash.classList.remove('hidden');
+    openModal(els.newsFlash);
 }
