@@ -1468,6 +1468,145 @@ body.dark-mode {
     padding: 7px 10px;
 }
 
+#personal-stats-panel {
+    border-left: 4px solid var(--primary);
+}
+
+#personal-stats-panel.is-changing {
+    animation: stat-panel-pulse 900ms ease both;
+}
+
+.personal-last-change {
+    background: rgba(56, 111, 143, 0.12);
+    border: 1px solid rgba(56, 111, 143, 0.22);
+    border-radius: 8px;
+    display: grid;
+    gap: 3px;
+    padding: 8px;
+}
+
+.personal-last-change b {
+    color: var(--primary);
+    font-size: 0.82rem;
+}
+
+.personal-last-change span {
+    color: #263746;
+    font-size: 0.86rem;
+    font-weight: 900;
+    line-height: 1.35;
+}
+
+.personal-stat-row {
+    background: rgba(255,255,255,0.5);
+    border: 1px solid rgba(56, 111, 143, 0.12);
+    border-radius: 8px;
+    padding: 7px;
+}
+
+.personal-stat-row.changed {
+    background: rgba(255,255,255,0.82);
+    border-color: rgba(131, 84, 37, 0.28);
+}
+
+.personal-stat-meta {
+    align-items: center;
+    display: inline-flex;
+    gap: 6px;
+}
+
+.personal-delta {
+    border-radius: 999px;
+    font-size: 0.75rem;
+    font-style: normal;
+    font-weight: 900;
+    line-height: 1;
+    padding: 4px 6px;
+}
+
+.personal-delta.good {
+    background: rgba(76, 175, 80, 0.14);
+    color: #2e7d32;
+}
+
+.personal-delta.bad {
+    background: rgba(244, 67, 54, 0.12);
+    color: #c7372f;
+}
+
+.personal-change-card {
+    background: rgba(255,255,255,0.82);
+    border: 1px solid rgba(56, 111, 143, 0.2);
+    border-left: 4px solid var(--alert);
+    border-radius: 10px;
+    display: grid;
+    gap: 10px;
+    margin: 12px 0 18px;
+    padding: 12px;
+    text-align: left;
+}
+
+.personal-change-card > b {
+    color: #263746;
+    font-size: 1rem;
+}
+
+.personal-change-card > div {
+    display: grid;
+    gap: 8px;
+}
+
+.personal-change-card article {
+    background: rgba(255,255,255,0.72);
+    border-radius: 8px;
+    display: grid;
+    gap: 3px;
+    padding: 9px 10px;
+}
+
+.personal-change-card article.good {
+    border-left: 4px solid var(--steady);
+}
+
+.personal-change-card article.bad {
+    border-left: 4px solid var(--danger);
+}
+
+.personal-change-card span,
+.personal-change-card small {
+    display: block;
+}
+
+.personal-change-card span {
+    color: #263746;
+    font-weight: 900;
+}
+
+.personal-change-card strong {
+    color: var(--primary);
+}
+
+.personal-change-card small {
+    color: #536372;
+    font-weight: 800;
+    line-height: 1.35;
+}
+
+@keyframes stat-panel-pulse {
+    0% {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        transform: translateY(0);
+    }
+    35% {
+        box-shadow: 0 12px 34px rgba(131, 84, 37, 0.26);
+        transform: translateY(-2px);
+    }
+    100% {
+        box-shadow: 0 8px 32px rgba(0, 0, 0, 0.1);
+        transform: translateY(0);
+    }
+}
+
 .beat-card {
     align-items: center;
     animation: beat-slide 360ms ease both;

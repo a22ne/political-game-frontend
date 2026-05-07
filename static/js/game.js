@@ -224,6 +224,7 @@ const gameState = {
     decisionLocked: false,
     persuasionLocked: false,
     appliedDecisionKeys: {},
+    lastPersonalChanges: [],
     npcContinuity: {},
     choiceHistory: [],
     reflectionLog: [],
@@ -3821,6 +3822,7 @@ async function startGame() {
     gameState.decisionLocked = false;
     gameState.persuasionLocked = false;
     gameState.appliedDecisionKeys = {};
+    gameState.lastPersonalChanges = [];
     resetBehaviorTracking();
     
     // 隨機分配可玩角色
@@ -3959,24 +3961,176 @@ function updateStatsUI() {
     renderPersonalStats();
 }
 
+function clampStatValue(value = 0) {
+    return Math.max(0, Math.min(100, Math.round(value)));
+}
+
+function personalStatIsRisk(key = "") {
+    return /危機|過勞|風險|壓力|污名|債務/.test(key);
+}
+
+function personalStatColor(key = "", value = 50) {
+    const risk = personalStatIsRisk(key);
+    if (risk) {
+        if (value >= 70) return '#f44336';
+        if (value <= 30) return '#4caf50';
+        return '#4a90e2';
+    }
+    if (value <= 30) return '#f44336';
+    if (value >= 70) return '#4caf50';
+    return '#4a90e2';
+}
+
+function personalChangeTone(key = "", change = 0) {
+    if (change === 0) return "";
+    const risk = personalStatIsRisk(key);
+    const isGood = risk ? change < 0 : change > 0;
+    return isGood ? "good" : "bad";
+}
+
+function hasPersonalStat(statName = "") {
+    return Boolean(gameState.character?.personal_stats && Object.prototype.hasOwnProperty.call(gameState.character.personal_stats, statName));
+}
+
+function contextualPersonalPressure(event = {}, effects = {}, option = {}) {
+    if (!gameState.character?.personal_stats || event.is_news) return {};
+    const role = gameState.character.name;
+    const lens = issueLens(event).label;
+    const [key, value] = strongestEffect(effects);
+    const changes = {};
+    const earlyPulse = gameState.currentEventIndex <= 2 ? 1 : 0;
+    const add = (stat, delta) => {
+        if (!hasPersonalStat(stat) || !delta) return;
+        changes[stat] = (changes[stat] || 0) + delta;
+    };
+
+    if (role === "學生運動者") {
+        if ((effects.populism || 0) > 0 || (effects.order || 0) < 0) {
+            add("社會影響力", 5 + earlyPulse);
+            add("退學危機", 4 + earlyPulse);
+        } else if ((effects.progress || 0) > 0) {
+            add("社會影響力", 3 + earlyPulse);
+            add("退學危機", 1);
+        } else if ((effects.order || 0) > 0) {
+            add("退學危機", -3);
+            add("社會影響力", -1);
+        } else if ((effects.freedom || 0) > 0) {
+            add("社會影響力", 4 + earlyPulse);
+            add("退學危機", 2);
+        } else {
+            add("社會影響力", 2);
+        }
+        if (lens === "世代衝突" || lens === "生計壓力") add("社會影響力", 1);
+    } else if (role === "基層公務員") {
+        if ((effects.freedom || 0) > 0 || (effects.progress || 0) > 0) {
+            add("升遷考績", -3 - earlyPulse);
+            add("過勞指數", 4 + earlyPulse);
+        } else if ((effects.order || 0) > 0) {
+            add("升遷考績", 3 + earlyPulse);
+            add("過勞指數", 1);
+        } else if ((effects.populism || 0) > 0 || (effects.order || 0) < 0) {
+            add("升遷考績", -2);
+            add("過勞指數", 5 + earlyPulse);
+        } else {
+            add("過勞指數", 2);
+        }
+        if (lens === "責任危機" || lens === "資訊戰") add("過勞指數", 1);
+    } else if (role === "中小企業主") {
+        if ((effects.progress || 0) > 0) {
+            add("公司資金", -4 - earlyPulse);
+            add("黑白兩道人脈", 2);
+        } else if ((effects.order || 0) > 0) {
+            add("公司資金", 3 + earlyPulse);
+            add("黑白兩道人脈", 1);
+        } else if ((effects.populism || 0) > 0 || (effects.order || 0) < 0) {
+            add("公司資金", -3 - earlyPulse);
+            add("黑白兩道人脈", 4 + earlyPulse);
+        } else if ((effects.freedom || 0) > 0) {
+            add("公司資金", -2);
+            add("黑白兩道人脈", 2);
+        } else {
+            add("公司資金", 2);
+        }
+        if (lens === "生計壓力" || lens === "發展代價") add("公司資金", -1);
+    }
+
+    if (!Object.keys(changes).length) {
+        const firstStat = Object.keys(gameState.character.personal_stats)[0];
+        add(firstStat, value >= 0 ? 2 : -2);
+    }
+
+    return changes;
+}
+
+function personalChangeReason(stat = "", change = 0) {
+    const up = change > 0;
+    const role = gameState.character?.name || "";
+    const copy = {
+        "學生運動者": {
+            "社會影響力": up ? "你的行動更容易被看見。" : "外界覺得你的動員力暫時降溫。",
+            "退學危機": up ? "校方與保守派更可能把你列為麻煩人物。" : "你暫時降低了被校方處理的風險。"
+        },
+        "基層公務員": {
+            "升遷考績": up ? "你更符合體制期待。" : "你碰到上級不想公開的責任。",
+            "過勞指數": up ? "更多收尾工作被推到你身上。" : "你暫時減少了第一線壓力。"
+        },
+        "中小企業主": {
+            "公司資金": up ? "你的店暫時保住現金流。" : "立場選擇開始反映在成本上。",
+            "黑白兩道人脈": up ? "你更能調動檯面上或檯面下的關係。" : "一些關係開始跟你保持距離。"
+        }
+    };
+    return copy[role]?.[stat] || (up ? "角色資源上升。" : "角色壓力上升。");
+}
+
+function renderPersonalChangeReport(changes = []) {
+    if (!changes.length) return "";
+    return `
+        <div class="personal-change-card">
+            <b>角色狀態變化</b>
+            <div>
+                ${changes.map((item) => {
+                    const tone = personalChangeTone(item.key, item.change);
+                    const sign = item.change > 0 ? "+" : "";
+                    return `
+                        <article class="${tone}">
+                            <span>${escapeHTML(item.key)} <strong>${sign}${item.change}</strong></span>
+                            <small>${escapeHTML(item.reason)}</small>
+                        </article>`;
+                }).join("")}
+            </div>
+        </div>`;
+}
+
 function renderPersonalStats() {
     if (!gameState.character || !gameState.character.personal_stats) return;
     els.personalStatsContainer.innerHTML = '';
     const stats = gameState.character.personal_stats;
+    const lastChanges = gameState.lastPersonalChanges || [];
+    els.personalStatsPanel?.classList.toggle('is-changing', lastChanges.length > 0);
+    if (lastChanges.length) {
+        els.personalStatsContainer.innerHTML += `
+            <div class="personal-last-change">
+                <b>上一回合影響</b>
+                <span>${lastChanges.map((item) => `${escapeHTML(item.key)} ${item.change > 0 ? "+" : ""}${item.change}`).join("、")}</span>
+            </div>`;
+    }
     for (let key in stats) {
         let val = Math.max(0, Math.min(100, stats[key]));
         stats[key] = val;
+        const latest = lastChanges.find((item) => item.key === key);
+        const deltaClass = latest ? personalChangeTone(key, latest.change) : "";
+        const deltaText = latest ? `${latest.change > 0 ? "+" : ""}${latest.change}` : "0";
         
-        // 根據數值給予顏色 (簡單邏輯：低於30紅色，高於70綠色)
-        let color = '#4a90e2';
-        if (val <= 30) color = '#f44336';
-        if (val >= 70) color = '#4caf50';
+        const color = personalStatColor(key, val);
         
         els.personalStatsContainer.innerHTML += `
-            <div style="font-size: 0.9rem;">
-                <div style="display: flex; justify-content: space-between; margin-bottom: 2px;">
+            <div class="personal-stat-row ${latest ? "changed" : ""}" style="font-size: 0.9rem;">
+                <div style="display: flex; justify-content: space-between; align-items: center; gap: 8px; margin-bottom: 2px;">
                     <span>${key}</span>
-                    <strong>${val}</strong>
+                    <span class="personal-stat-meta">
+                        ${latest ? `<em class="personal-delta ${deltaClass}">${deltaText}</em>` : ""}
+                        <strong>${val}</strong>
+                    </span>
                 </div>
                 <div style="width: 100%; height: 6px; background: rgba(0,0,0,0.1); border-radius: 3px; overflow: hidden;">
                     <div style="width: ${val}%; height: 100%; background: ${color}; transition: width 0.5s;"></div>
@@ -4585,6 +4739,7 @@ function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh =
 
     let statChangesHtml = "";
     const personalChanges = {};
+    const appliedPersonalChanges = [];
     function queuePersonalStatChange(key, change) {
         personalChanges[key] = (personalChanges[key] || 0) + change;
     }
@@ -4603,6 +4758,11 @@ function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh =
         }
     }
 
+    if (!alreadyAppliedPersonalStats && gameState.character.personal_stats && !Object.keys(personalChanges).length) {
+        const contextualChanges = contextualPersonalPressure(ev, effects, option);
+        Object.entries(contextualChanges).forEach(([key, change]) => queuePersonalStatChange(key, change));
+    }
+
     if (!alreadyAppliedPersonalStats) {
         Object.entries(personalChanges).forEach(([key, change]) => applyPersonalStatChange(key, change));
         gameState.appliedDecisionKeys[decisionKey] = true;
@@ -4610,12 +4770,23 @@ function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh =
 
     function applyPersonalStatChange(key, change) {
         if (gameState.character.personal_stats[key] !== undefined) {
-            gameState.character.personal_stats[key] += change;
-            const color = change > 0 ? 'var(--steady)' : 'var(--danger)';
-            const sign = change > 0 ? '+' : '';
-            statChangesHtml += `<span style="color: ${color}; background: rgba(255,255,255,0.82); padding: 5px 10px; border-radius: 5px;">${key} ${sign}${change}</span>`;
+            const before = clampStatValue(gameState.character.personal_stats[key]);
+            const after = clampStatValue(before + change);
+            const actualChange = after - before;
+            gameState.character.personal_stats[key] = after;
+            if (actualChange !== 0) {
+                appliedPersonalChanges.push({
+                    key,
+                    before,
+                    after,
+                    change: actualChange,
+                    reason: personalChangeReason(key, actualChange)
+                });
+            }
         }
     }
+    gameState.lastPersonalChanges = appliedPersonalChanges;
+    statChangesHtml = renderPersonalChangeReport(appliedPersonalChanges);
 
     updateNPCApprovalsBasedOnEffects(effects, pTarget, isPHigh);
     applyContextualNpcDeltas(ev, option, effects, pOption);
