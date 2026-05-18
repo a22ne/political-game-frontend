@@ -4838,3 +4838,16 @@ function applyDecisionAndShowNews(option, ev, pOption, pTarget = null, isPHigh =
     els.nextTurnBtn.innerText = beat.next || "確認";
     openModal(els.newsFlash);
 }
+const NPC_REACTION_PROFILES  = {
+        "\u67ef\u723e\u5e02\u9577": { freedom: 0.3,  order: 1.0,  progress: 0.8,  populism: -0.5 },
+        "\u83ab\u9577\u8001":   { freedom: -2.5, order: 1.8,  progress: -1.0, populism: 0.5  },
+        "\u827e\u905a\u8b70\u54e1": { freedom: 2.5,  order: -1.5, progress: 1.5,  populism: -0.8 },
+        "\u5a01\u5ec9\u7e3d\u88c1": { freedom: -0.3, order: 0.8,  progress: 1.2,  populism: -1.0 },
+        "\u8389\u4e9e\u8a18\u8005": { freedom: 1.5,  order: -0.5, progress: 0.8,  populism: -0.3 },
+        "\u9e9e\u982d\u76ee":   { freedom: 0.8,  order: -1.8, progress: 0.5,  populism: 1.5  },
+        "\u96f7\u5c07\u8ecd":   { freedom: -1.5, order: 2.0,  progress: -0.5, populism: -0.5 },
+        "\u860d\u7db2\u7d05":   { freedom: 0.2,  order: -0.3, progress: 0.3,  populism: 2.0  },
+        "\u8cbb\u6559\u6388":   { freedom: 1.2,  order: 0.3,  progress: 1.8,  populism: -1.5 }
+};
+const NPC_QUOTES = {
+        "\u67ef\u723e\u5e02\u9577":   { positive: ["\u9019\u500b\u65b9\u5411\uff0c\u6211\u53ef\u4ee5\u63a5\u53d7\u3002","\
