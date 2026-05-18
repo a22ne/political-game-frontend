@@ -2668,3 +2668,32 @@ body.dark-mode {
     color: var(--primary);
     margin: 0 0 6px 0;
 }
+
+/* === DYNAMIC CITY ANIMATIONS === */
+@keyframes carMoveRight { from { transform: translateX(-60px); } to { transform: translateX(960px); } }
+@keyframes carMoveLeft { from { transform: translateX(960px); } to { transform: translateX(-60px); } }
+@keyframes carMoveDown { from { transform: translateY(-30px); } to { transform: translateY(600px); } }
+@keyframes carMoveUp { from { transform: translateY(600px); } to { transform: translateY(-30px); } }
+@keyframes winBlink { 0%, 92%, 100% { opacity: 1; } 94% { opacity: 0.1; } 96% { opacity: 0.9; } }
+@keyframes winBlinkSlow { 0%, 80%, 100% { opacity: 0.7; } 82% { opacity: 0.05; } 84% { opacity: 0.7; } }
+@keyframes floatDot { 0% { transform: translate(0,0) scale(1); opacity: 0.6; } 50% { transform: translate(-3px,-8px) scale(0.9); opacity: 0.5; } 100% { transform: translate(0,0) scale(1); opacity: 0.6; } }
+@keyframes floatDotSlow { 0% { transform: translate(0,0); opacity: 0.4; } 50% { transform: translate(5px,-6px); opacity: 0.7; } 100% { transform: translate(0,0); opacity: 0.4; } }
+@keyframes blackoutFlicker { 0%,100% { opacity: 0.85; } 10% { opacity: 0.1; } 14% { opacity: 0.05; } 16% { opacity: 0.8; } 46% { opacity: 0.15; } 48% { opacity: 0.85; } }
+#city-canvas { position: absolute; inset: 0; width: 100%; height: 100%; pointer-events: none; z-index: 6; border-radius: 12px; opacity: 0.55; }
+#npc-toast-container { position: fixed; bottom: 100px; right: 24px; z-index: 200; display: flex; flex-direction: column-reverse; gap: 8px; pointer-events: none; }
+.npc-toast { display: flex; align-items: center; gap: 10px; background: rgba(15,20,35,0.95); border: 1px solid rgba(255,255,255,0.1); border-radius: 10px; padding: 10px 14px; max-width: 280px; animation: toastIn 0.35s cubic-bezier(0.175,0.885,0.32,1.275) forwards, toastOut 0.3s ease 3.2s forwards; backdrop-filter: blur(12px); box-shadow: 0 4px 20px rgba(0,0,0,0.5); }
+.npc-toast.positive { border-left: 3px solid #3fb98b; }
+.npc-toast.negative { border-left: 3px solid #e05252; }
+.npc-toast-avatar { width: 36px; height: 36px; border-radius: 50%; object-fit: cover; flex-shrink: 0; border: 2px solid rgba(255,255,255,0.15); }
+.npc-toast-text { font-size: 0.82rem; color: #cdd3da; line-height: 1.4; }
+.npc-toast-name { font-size: 0.72rem; color: #8b949e; margin-bottom: 2px; }
+.npc-toast-delta { font-weight: 700; font-size: 0.9rem; margin-left: auto; flex-shrink: 0; }
+@keyframes toastIn { from { transform: translateX(100%); opacity: 0; } to { transform: translateX(0); opacity: 1; } }
+@keyframes toastOut { from { transform: translateX(0); opacity: 1; } to { transform: translateX(110%); opacity: 0; } }
+@keyframes pinShake { 0%,100% { transform: translate(-50%,-100%) rotate(0deg); } 15% { transform: translate(calc(-50% + 4px),-100%) rotate(3deg); } 30% { transform: translate(calc(-50% - 4px),-100%) rotate(-3deg); } 60% { transform: translate(calc(-50% - 3px),-100%) rotate(-2deg); } }
+@keyframes pinPing { 0% { box-shadow: 0 4px 16px rgba(0,0,0,0.5), 0 0 0 0 rgba(63,185,139,0.6); } 70% { box-shadow: 0 4px 16px rgba(0,0,0,0.5), 0 0 0 16px rgba(63,185,139,0); } 100% { box-shadow: 0 4px 16px rgba(0,0,0,0.5), 0 0 0 0 rgba(63,185,139,0); } }
+.map-pin.pin-shake { animation: pinShake 0.5s ease; }
+.map-pin.pin-ping { animation: pinPing 0.8s ease; }
+#chain-flash { position: fixed; inset: 0; background: radial-gradient(ellipse at center, rgba(224,82,82,0.3) 0%, transparent 70%); z-index: 150; pointer-events: none; opacity: 0; }
+@keyframes chainFlash { 0% { opacity: 0; } 15% { opacity: 0.35; } 100% { opacity: 0; } }
+#chain-flash.active { animation: chainFlash 1s ease forwards; }
